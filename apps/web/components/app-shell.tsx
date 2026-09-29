@@ -9,6 +9,7 @@ import {
   MessagesSquare,
   QrCode,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/app/actions/auth";
@@ -34,9 +35,12 @@ export function AppShell({
   return (
     <div className="min-h-full md:grid md:grid-cols-[240px_1fr]">
       <aside className="hidden border-r border-separator md:flex md:flex-col md:gap-6 md:p-4">
-        <div>
-          <p className="text-lg font-semibold">SoyGerman</p>
-          <p className="truncate text-sm text-muted">{email}</p>
+        <div className="flex items-center gap-3">
+          <Image src="/logo.png" alt="" width={40} height={40} />
+          <div className="min-w-0">
+            <p className="text-lg font-semibold">SoyGerman</p>
+            <p className="truncate text-sm text-muted">{email}</p>
+          </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1">
           {links.map((link) => {
@@ -60,7 +64,10 @@ export function AppShell({
 
       <div className="flex min-h-full flex-col">
         <header className="flex items-center justify-between border-b border-separator px-4 py-3">
-          <p className="font-semibold md:hidden">SoyGerman</p>
+          <div className="flex items-center gap-2 font-semibold md:hidden">
+            <Image src="/logo.png" alt="" width={28} height={28} />
+            SoyGerman
+          </div>
           <p className="hidden truncate text-sm text-muted md:block">{email}</p>
           <div className="flex items-center gap-2">
             <ThemeToggle />
