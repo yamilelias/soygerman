@@ -163,3 +163,6 @@ $$;
 REVOKE ALL ON FUNCTION public.claim_due_messages(integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.claim_due_messages(integer) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_due_messages(integer) TO service_role;
+
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.handle_new_user() FROM anon, authenticated;
