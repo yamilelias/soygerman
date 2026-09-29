@@ -40,10 +40,18 @@ export function ChatExplorer({ chats }: { chats: Chat[] }) {
         onSelectionChange={(key) => setFilter(String(key) as Filter)}
       >
         <Tabs.List aria-label="Filtrar chats">
-          <Tabs.Tab id="all">Todos</Tabs.Tab>
-          <Tabs.Tab id="groups">Grupos</Tabs.Tab>
-          <Tabs.Tab id="direct">Directos</Tabs.Tab>
-          <Tabs.Indicator />
+          <Tabs.Tab id="all">
+            Todos
+            <Tabs.Indicator />
+          </Tabs.Tab>
+          <Tabs.Tab id="groups">
+            Grupos
+            <Tabs.Indicator />
+          </Tabs.Tab>
+          <Tabs.Tab id="direct">
+            Directos
+            <Tabs.Indicator />
+          </Tabs.Tab>
         </Tabs.List>
       </Tabs>
 
