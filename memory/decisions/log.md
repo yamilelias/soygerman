@@ -27,3 +27,7 @@ Formato: [AAAA-MM-DD] DECISIÓN: ... | RAZONAMIENTO: ... | CONTEXTO: ...
 [2026-09-28] DECISIÓN: `handle_new_user()` no se puede ejecutar desde la API. | RAZONAMIENTO: Es `SECURITY DEFINER` y solo debe correr como trigger al crear un usuario. | CONTEXTO: El advisor de Supabase lo marcó. Sigue creando el perfil.
 
 [2026-09-28] DECISIÓN: El correo de acceso sale por Resend, remitente `no-reply@soygerman.com`, SMTP `smtp.resend.com:465`, usuario `resend`. | RAZONAMIENTO: El correo integrado de Supabase solo escribe a miembros del equipo y con un límite bajo. | CONTEXTO: La API key no se guarda en el repositorio. Al cierre del 2026-09-28 el panel de Supabase no tenía sesión y la CLI local no administra este proyecto, así que el SMTP aún no quedó aplicado.
+
+[2026-09-28] DECISIÓN: La URL de producción para Auth es `https://www.soygerman.com`. | RAZONAMIENTO: Vercel redirige el apex `soygerman.com` a `www`. El magic link pide `{origen}/auth/callback`. Si esa URL no está permitida, Supabase manda el enlace a la Site URL y la sesión no se guarda. | CONTEXTO: El 28 de septiembre el enlace de `yamileliassoto@gmail.com` verificó en Auth y dejó `auth.sessions` vacía.
+
+[2026-09-28] DECISIÓN: Cada actualización de la memoria se commitea sola, en el momento. | RAZONAMIENTO: Si queda sin commit, el siguiente cambio de código la arrastra. | CONTEXTO: Aplica a `AGENTS.md` y a `memory/`. `memory/local.md` no entra en git.

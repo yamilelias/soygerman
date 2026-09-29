@@ -7,3 +7,4 @@ Un solo tema: qué no mezclar.
 - Un cambio de UI se verifica en el navegador, o se dice qué no se pudo probar.
 - No rehagas el esquema en la app. `supabase/migrations` es la fuente.
 - `apps/web/AGENTS.md` pertenece a Next.js. La memoria del producto está en la raíz y en `memory/`.
+- Un registro de memoria se commitea solo, en cuanto se escribe. No se deja mezclado con código u otras modificaciones. `memory/local.md` queda fuera de git.

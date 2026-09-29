@@ -6,11 +6,17 @@ La migración `supabase/migrations/20260928120000_init.sql` ya está aplicada. I
 
 Auth por correo está activo y el alta automática también. El correo integrado solo entrega a miembros del equipo.
 
-Redirect URLs que hacen falta:
+El dominio canónico de la app es `https://www.soygerman.com`. Vercel manda `https://soygerman.com` ahí con un 308.
 
-- `http://localhost:3000/**`
+Site URL: `https://www.soygerman.com`.
+
+Redirect URLs:
+
+- `https://www.soygerman.com/**`
+- `https://soygerman.com/**`
 - `https://soygerman-rose.vercel.app/**`
-
-Site URL de producción: `https://soygerman-rose.vercel.app`.
+- `http://localhost:3000/**`
 
 Para previews de Vercel, el patrón del equipo es `https://soygerman-*-weprograpp.vercel.app/**`.
+
+Si `emailRedirectTo` no está en esa lista, el enlace del correo usa la Site URL sola, sin `/auth/callback`, y la app vuelve a `/login` sin crear sesión.

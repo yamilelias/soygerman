@@ -62,4 +62,4 @@ El mismo `WORKER_API_SECRET` en ambas. El service role solo en el worker.
 
 ## Correo
 
-Remitente previsto: `no-reply@soygerman.com` vía Resend (`smtp.resend.com`, puerto 465, usuario `resend`). La contraseña SMTP es la API key y no está en el repositorio. Falta aplicarlo en el panel de Supabase y agregar `https://soygerman-rose.vercel.app/**` a las redirect URLs, junto con `http://localhost:3000/**`.
+Remitente previsto: `no-reply@soygerman.com` vía Resend (`smtp.resend.com`, puerto 465, usuario `resend`). La contraseña SMTP es la API key y no está en el repositorio. El correo de acceso ya llega. La Site URL y las redirect URLs tienen que incluir `https://www.soygerman.com/**`; si no, el enlace no vuelve a `/auth/callback`.
