@@ -6,8 +6,8 @@ export default function DashboardPage() {
       <div className="mx-auto w-full max-w-xl">
         <h1 className="text-2xl font-semibold">Vinculación</h1>
         <p className="text-sm text-muted">
-          El código QR aparece aquí cuando el worker lo genera y desaparece al
-          conectar.
+          Al vincular aparece el código QR. El estado se actualiza solo hasta
+          que la sesión queda conectada.
         </p>
       </div>
       <WhatsAppConnection />

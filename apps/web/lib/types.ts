@@ -1,4 +1,9 @@
-export type WhatsAppSessionStatus = "disconnected" | "qr_ready" | "connected";
+export type WhatsAppSessionStatus =
+  | "disconnected"
+  | "connecting"
+  | "qr_ready"
+  | "authenticating"
+  | "connected";
 
 export type WhatsAppSession = {
   id: string;
