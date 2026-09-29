@@ -11,4 +11,6 @@ No van a git ni a `memory/`:
 
 Sitios válidos: `apps/web/.env.local`, `apps/worker/.env`, variables de Vercel y de Render, y el SMTP del panel de Supabase.
 
+La caché de la CLI (`supabase/.temp/`, `supabase/.branches/`) tampoco entra: guarda el proyecto enlazado y la URL del pooler de esta máquina.
+
 La CLI de Supabase de esta máquina ve el proyecto «Dossier generation» (`uwfdiunlhexwgztflcuf`), no SoyGerman. Para este producto usa el MCP o el panel del proyecto `nbwxmkcwzqqxvxxfqqpn`.

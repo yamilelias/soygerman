@@ -41,12 +41,17 @@ No hay habilidades todavía. El directorio `memory/skills/` queda vacío a prop�
 - Anotar la URL del worker de Render y comprobar `GET /health`.
 - Verificar QR, sincronización de chats, agenda y cancelación.
 
+## Historial
+
+Cada cambio que termines se commitea en ese momento. El historial local es la copia de lo que pasó; no se cierra una tarea con el trabajo solo en el árbol.
+
+Los commits son atómicos. Una tarea puede dejar varios: uno con la funcionalidad y otro con la documentación o la memoria. El detalle está en `memory/rules/commits.md`.
+
 ## Mantenimiento
 
 - Cada mes: revisa `memory/context/current-priorities.md`.
 - Cada trimestre: actualiza `memory/context/goals.md`. La nota de ese archivo lo recuerda.
 - Al decidir algo que cambie el sistema: una línea en `memory/decisions/log.md`.
-- Al actualizar `memory/` o este archivo por un registro de memoria, haz commit de solo esos archivos antes de seguir con otro cambio. Así no se mezclan con el código. `memory/local.md` no entra en git.
 - No borres memoria. Pasa lo viejo a `memory/archives/`.
 - Al cerrar una sesión larga, copia `memory/templates/session-summary.md`.
 - Si alguien dice «recuerda que…», escríbelo en el archivo de memoria que corresponda.
