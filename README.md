@@ -28,6 +28,31 @@ La web queda en `http://localhost:3000` y el worker en el puerto `3001`.
 
 `npm run build:web` usa Webpack (`next build --webpack`) porque el plugin PWA no corre con Turbopack. En desarrollo la PWA queda apagada.
 
+## Web en Vercel
+
+El proyecto es [weprograpp/soygerman](https://vercel.com/weprograpp/soygerman). El directorio raíz es `apps/web` y el build ejecuta `npm run build`. La instalación solo trae el workspace `web`, para no bajar Chromium del worker.
+
+Variables en Production y Preview:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `WORKER_API_SECRET`
+- `WORKER_URL`
+
+Después del primer despliegue, agrega la URL de producción en Supabase → Authentication → URL Configuration, con el comodín `https://<tu-dominio>/**`.
+
+## Correo con Resend
+
+El magic link lo envía Supabase Auth. En [SMTP](https://supabase.com/dashboard/project/nbwxmkcwzqqxvxxfqqpn/auth/smtp) usa la cuenta de Resend:
+
+- Host: `smtp.resend.com`
+- Puerto: `465`
+- Usuario: `resend`
+- Contraseña: la API key de Resend
+- Remitente: un correo de un dominio verificado en Resend, por ejemplo `SoyGerman <no-reply@tu-dominio>`
+
+Sin ese SMTP, Supabase solo manda el enlace a los miembros del equipo y con un límite bajo.
+
 ## Worker en Render
 
 - Web Service con Dockerfile `apps/worker/Dockerfile` y contexto `apps/worker`.
