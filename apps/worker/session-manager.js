@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode");
+const { log } = require("./log");
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -58,7 +59,10 @@ class SessionManager {
       { onConflict: "user_id" },
     );
     if (error) {
-      console.error("whatsapp_sessions", userId, error.message);
+      log(
+        "sesión",
+        `no se guardó ${userId} status=${fields.status || "sin cambio"}: ${error.message}`,
+      );
     }
   }
 
@@ -77,13 +81,17 @@ class SessionManager {
     try {
       await client.destroy();
     } catch (error) {
-      console.error("destroy", error);
+      log("destroy", error.message || String(error));
     }
   }
 
   async connect(userId) {
     const existing = this.clients.get(userId);
     if (this.isLinkInProgress(existing)) {
+      log(
+        "connect",
+        `${userId} ya en curso status=${existing.status} intento=${existing.attempt}`,
+      );
       return {
         status: existing.status === "ready" ? "connected" : "connecting",
       };
@@ -95,6 +103,7 @@ class SessionManager {
       await this.safeDestroy(existing.client);
     }
 
+    log("connect", `${userId} iniciando intento 1`);
     await this.upsertSession(userId, {
       status: "connecting",
       qr_code_base64: null,
@@ -115,6 +124,10 @@ class SessionManager {
     if (process.env.PUPPETEER_EXECUTABLE_PATH) {
       puppeteer.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
     }
+    log(
+      "launch",
+      `${userId} intento ${attempt} chrome ${puppeteer.executablePath || "puppeteer"}`,
+    );
 
     const client = new Client({
       authStrategy: new LocalAuth({
@@ -155,8 +168,9 @@ class SessionManager {
           status: "qr_ready",
           qr_code_base64: base64,
         });
+        log("qr", `${userId} listo bytes=${base64.length}`);
       } catch (error) {
-        console.error("qr", userId, error);
+        log("qr", `${userId} falló: ${error.message || error}`);
       }
     });
 
@@ -164,7 +178,7 @@ class SessionManager {
       if (!stillThisClient()) return;
       entry.status = "authenticating";
       await this.upsertSession(userId, { status: "authenticating" });
-      console.log("authenticated", userId);
+      log("authenticated", userId);
     });
 
     client.on("ready", async () => {
@@ -175,16 +189,16 @@ class SessionManager {
         status: "connected",
         qr_code_base64: null,
       });
-      console.log("ready", userId);
+      log("ready", userId);
     });
 
     client.on("auth_failure", (message) => {
-      console.error("auth_failure", userId, message);
+      log("auth_failure", `${userId} ${message}`);
       this.scheduleRetry(userId, client, generation, message);
     });
 
     client.on("disconnected", (reason) => {
-      console.error("disconnected", userId, reason);
+      log("disconnected", `${userId} ${reason}`);
       const current = this.clients.get(userId);
       if (!current || current.client !== client || current.closing) return;
       if (current.status === "ready") {
@@ -201,7 +215,7 @@ class SessionManager {
     });
 
     client.initialize().catch((error) => {
-      console.error("initialize", userId, error);
+      log("initialize", `${userId} falló: ${error.message || error}`);
       this.scheduleRetry(userId, client, generation, error);
     });
   }
@@ -224,7 +238,7 @@ class SessionManager {
   }
 
   async retry(userId, client, generation, attempt, reason) {
-    console.error("link retry", userId, String(reason), "attempt", attempt);
+    log("reintento", `${userId} intento ${attempt} motivo=${reason}`);
     await this.safeDestroy(client);
 
     const still = () => {
@@ -245,7 +259,7 @@ class SessionManager {
         status: "disconnected",
         qr_code_base64: null,
       });
-      console.error("link failed", userId, "attempts", attempt);
+      log("reintento", `${userId} agotado tras ${attempt} intentos`);
       return;
     }
 
@@ -267,7 +281,7 @@ class SessionManager {
       try {
         await entry.client.logout();
       } catch (error) {
-        console.error("logout", userId, error);
+        log("logout", `${userId} ${error.message || error}`);
         await this.safeDestroy(entry.client);
       }
     }
@@ -318,7 +332,7 @@ class SessionManager {
       if (!entry.isDirectory() || !entry.name.startsWith("session-")) continue;
       const userId = entry.name.slice("session-".length);
       if (!UUID_PATTERN.test(userId)) continue;
-      console.log("restore", userId);
+      log("restore", userId);
       await this.connect(userId);
     }
   }

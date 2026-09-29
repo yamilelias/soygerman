@@ -1,11 +1,13 @@
 require("dotenv").config();
 
+const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 const { SessionManager } = require("./session-manager");
 const { requireUser } = require("./auth");
 const { startCron } = require("./cron");
+const { log } = require("./log");
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -32,6 +34,18 @@ app.use(
   }),
 );
 app.use(express.json());
+
+app.use((req, res, next) => {
+  const started = Date.now();
+  log("http", `→ ${req.method} ${req.path}`);
+  res.on("finish", () => {
+    log(
+      "http",
+      `← ${req.method} ${req.path} ${res.statusCode} ${Date.now() - started}ms`,
+    );
+  });
+  next();
+});
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
@@ -67,14 +81,18 @@ app.post("/sync-chats", authenticate, async (req, res, next) => {
 });
 
 app.use((error, _req, res, _next) => {
-  console.error(error);
+  log("http", `error ${error.message || error}`);
   res.status(500).json({ error: error.message || "Error interno" });
 });
 
 app.listen(port, () => {
-  console.log(`worker listening on ${port}`);
+  const chrome = process.env.PUPPETEER_EXECUTABLE_PATH || "";
+  log(
+    "arranque",
+    `puerto ${port} origen ${process.env.WEB_ORIGIN || "http://localhost:3000"} chrome ${chrome || "el de puppeteer"} ${chrome ? (fs.existsSync(chrome) ? "encontrado" : "no existe") : ""}`.trim(),
+  );
   startCron(supabase, sessions);
   sessions.restoreSessions().catch((error) => {
-    console.error("restore", error);
+    log("restore", error.message || String(error));
   });
 });
