@@ -297,29 +297,54 @@ class SessionManager {
       throw new Error("WhatsApp no está conectado");
     }
 
-    const chats = await entry.client.getChats();
-    const rows = [];
-    for (const chat of chats) {
-      const waId = chat.id?._serialized;
-      const isGroup = classifyChat(waId, Boolean(chat.isGroup));
+    log("sync", `${userId} leyendo chats`);
+    let listed;
+    try {
+      listed = await entry.client.pupPage.evaluate(() => {
+        const collection = window.require("WAWebCollections").Chat;
+        return collection.getModelsArray().map((chat) => {
+          const waId = chat.id && chat.id._serialized;
+          const title = chat.formattedTitle || chat.name || waId;
+          return {
+            waId,
+            name: title == null ? "" : String(title),
+            isGroup: Boolean(chat.groupMetadata),
+          };
+        });
+      });
+    } catch (error) {
+      log("sync", `${userId} no pudo leer chats: ${error.message || error}`);
+      throw new Error("No se pudo leer la lista de chats de WhatsApp");
+    }
+
+    const now = new Date().toISOString();
+    const byWaId = new Map();
+    for (const chat of listed) {
+      const isGroup = classifyChat(chat.waId, chat.isGroup);
       if (isGroup === null) continue;
-      rows.push({
+      const name = chat.name.replaceAll("\u0000", "").trim() || chat.waId;
+      byWaId.set(chat.waId, {
         user_id: userId,
-        wa_id: waId,
-        name: chat.name || waId,
+        wa_id: chat.waId,
+        name,
         is_group: isGroup,
-        updated_at: new Date().toISOString(),
+        updated_at: now,
       });
     }
+    const rows = [...byWaId.values()];
 
     for (let index = 0; index < rows.length; index += 200) {
       const chunk = rows.slice(index, index + 200);
       const { error } = await this.supabase
         .from("chats")
         .upsert(chunk, { onConflict: "user_id,wa_id" });
-      if (error) throw new Error(error.message);
+      if (error) {
+        log("sync", `${userId} no se guardó: ${error.message}`);
+        throw new Error(error.message);
+      }
     }
 
+    log("sync", `${userId} guardados ${rows.length}`);
     return { count: rows.length };
   }
 
