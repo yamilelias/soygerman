@@ -22,9 +22,19 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+.env.keys
 !.env.example
 
 memory/local.md
+
+# Caché local de la CLI de Supabase (proyecto enlazado, pooler, versiones)
+supabase/.temp/
+supabase/.branches/
+
+.turbo/
+dist/
+.vercel
+.pnpm-debug.log*
 
 .wwebjs_auth/
 .wwebjs_cache/
