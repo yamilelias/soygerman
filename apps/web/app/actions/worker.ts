@@ -17,10 +17,16 @@ async function callWorker(path: string) {
 
   const base = process.env.WORKER_URL;
   const secret = process.env.WORKER_API_SECRET;
-  if (!base || !secret) return { error: "El worker no está configurado" };
+  if (!base || !secret) {
+    console.error(`[worker] ${path} sin WORKER_URL o WORKER_API_SECRET`);
+    return { error: "El worker no está configurado" };
+  }
+
+  const url = `${base.replace(/\/$/, "")}${path}`;
+  console.info(`[worker] POST ${url}`);
 
   try {
-    const response = await fetch(`${base.replace(/\/$/, "")}${path}`, {
+    const response = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -33,10 +39,16 @@ async function callWorker(path: string) {
       error?: string;
     };
     if (!response.ok) {
+      console.error(
+        `[worker] POST ${url} ${response.status} ${body.error || "sin detalle"}`,
+      );
       return { error: body.error || "Error del worker" };
     }
+    console.info(`[worker] POST ${url} ${response.status}`);
     return { ok: true as const };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "error de red";
+    console.error(`[worker] POST ${url} no respondió: ${message}`);
     return { error: "No se pudo contactar al worker" };
   }
 }
