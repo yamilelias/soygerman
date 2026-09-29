@@ -2,7 +2,7 @@
 
 La iniciativa activa de este repositorio.
 
-Estado: activo. La web está en producción. Auth, WhatsApp y el worker de producción siguen sin una prueba de punta a punta.
+Estado: activo. La web y el worker están en producción. Auth, WhatsApp y el envío del cron siguen sin una prueba de punta a punta.
 
 ## Hecho
 
@@ -13,7 +13,8 @@ Estado: activo. La web está en producción. Auth, WhatsApp y el worker de produ
 ## Fechas
 
 - 2026-09-28: primer despliegue de producción, después de corregir `lightningcss` en Linux.
+- 2026-09-29: el worker quedó en línea en Render y se actualizaron las variables de Vercel y Render.
 
 ## Siguiente
 
-Aplicar Resend, abrir las redirect URLs y desplegar el worker. El detalle operativo está en `memory/references/sops/`.
+Anotar la URL del worker, abrir las redirect URLs y probar el recorrido real. El detalle operativo está en `memory/references/sops/`.

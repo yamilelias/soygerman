@@ -31,3 +31,5 @@ Formato: [AAAA-MM-DD] DECISIÓN: ... | RAZONAMIENTO: ... | CONTEXTO: ...
 [2026-09-28] DECISIÓN: La URL de producción para Auth es `https://www.soygerman.com`. | RAZONAMIENTO: Vercel redirige el apex `soygerman.com` a `www`. El magic link pide `{origen}/auth/callback`. Si esa URL no está permitida, Supabase manda el enlace a la Site URL y la sesión no se guarda. | CONTEXTO: El 28 de septiembre el enlace de `yamileliassoto@gmail.com` verificó en Auth y dejó `auth.sessions` vacía.
 
 [2026-09-28] DECISIÓN: Cada actualización de la memoria se commitea sola, en el momento. | RAZONAMIENTO: Si queda sin commit, el siguiente cambio de código la arrastra. | CONTEXTO: Aplica a `AGENTS.md` y a `memory/`. `memory/local.md` no entra en git.
+
+[2026-09-29] DECISIÓN: El worker de producción corre en Render, workspace `tea-csp9avbgbbvc73ceiu30`. | RAZONAMIENTO: Chromium y el disco de la sesión no caben en Vercel. | CONTEXTO: El servicio quedó en línea y las variables de Vercel y Render se actualizaron ese día. La URL pública no quedó escrita en la memoria.

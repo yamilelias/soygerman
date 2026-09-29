@@ -1,6 +1,6 @@
 # Worker en Render
 
-Aún no hay servicio creado. Cuando se cree:
+Servicio en línea desde el 2026-09-29. Workspace `tea-csp9avbgbbvc73ceiu30`. Ese día quedaron cargadas las variables del worker y, en Vercel, las de la web. La URL pública no está en esta nota: el navegador de Cursor no tiene la sesión del panel.
 
 - Web Service, Dockerfile `apps/worker/Dockerfile`, contexto `apps/worker`.
 - Disco persistente en `/data`. `WWEBJS_DATA_PATH=/data/wwebjs`.

@@ -49,7 +49,7 @@ El cron es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` 
 ## Dónde corre
 
 - Web en Vercel, producción `https://soygerman-rose.vercel.app`. Directorio raíz `apps/web`. El build es `next build --webpack`.
-- Worker pensado para Render: Dockerfile en `apps/worker`, disco en `/data`, `WWEBJS_DATA_PATH=/data/wwebjs`, Chromium en `/usr/bin/chromium`, health `GET /health`, escucha `PORT`. Aún no está desplegado.
+- Worker en Render, workspace `tea-csp9avbgbbvc73ceiu30`, en línea desde el 2026-09-29. Dockerfile en `apps/worker`, disco en `/data`, `WWEBJS_DATA_PATH=/data/wwebjs`, Chromium en `/usr/bin/chromium`, health `GET /health`, escucha `PORT`. La URL pública falta en esta nota.
 - Local: web `http://localhost:3000`, worker `http://localhost:3001`.
 
 ## Variables
