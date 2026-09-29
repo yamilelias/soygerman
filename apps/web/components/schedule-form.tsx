@@ -10,6 +10,7 @@ import {
   Select,
   TextArea,
   TextField,
+  TimeField,
 } from "@heroui/react";
 import { getLocalTimeZone, now, type DateValue } from "@internationalized/date";
 import { useState, useTransition } from "react";
@@ -104,33 +105,56 @@ export function ScheduleForm({ chats }: { chats: Chat[] }) {
         onChange={setScheduledAt}
         minValue={minimum}
         hideTimeZone
+        shouldCloseOnSelect={false}
       >
-        <Label>Fecha y hora</Label>
-        <DateField.Group>
-          <DateField.Input>
-            {(segment) => <DateField.Segment segment={segment} />}
-          </DateField.Input>
-          <DatePicker.Trigger>
-            <DatePicker.TriggerIndicator />
-          </DatePicker.Trigger>
-        </DateField.Group>
-        <DatePicker.Popover>
-          <Calendar aria-label="Fecha de envío">
-            <Calendar.Header>
-              <Calendar.NavButton slot="previous" />
-              <Calendar.Heading />
-              <Calendar.NavButton slot="next" />
-            </Calendar.Header>
-            <Calendar.Grid>
-              <Calendar.GridHeader>
-                {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
-              </Calendar.GridHeader>
-              <Calendar.GridBody>
-                {(date) => <Calendar.Cell date={date} />}
-              </Calendar.GridBody>
-            </Calendar.Grid>
-          </Calendar>
-        </DatePicker.Popover>
+        {({ state }) => (
+          <>
+            <Label>Fecha y hora</Label>
+            <DateField.Group>
+              <DateField.Input>
+                {(segment) => <DateField.Segment segment={segment} />}
+              </DateField.Input>
+              <DatePicker.Trigger>
+                <DatePicker.TriggerIndicator />
+              </DatePicker.Trigger>
+            </DateField.Group>
+            <DatePicker.Popover className="flex flex-col gap-3">
+              <Calendar aria-label="Fecha de envío">
+                <Calendar.Header>
+                  <Calendar.NavButton slot="previous" />
+                  <Calendar.Heading />
+                  <Calendar.NavButton slot="next" />
+                </Calendar.Header>
+                <Calendar.Grid>
+                  <Calendar.GridHeader>
+                    {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                  </Calendar.GridHeader>
+                  <Calendar.GridBody>
+                    {(date) => <Calendar.Cell date={date} />}
+                  </Calendar.GridBody>
+                </Calendar.Grid>
+              </Calendar>
+              <div className="flex items-center justify-between gap-3">
+                <Label>Hora</Label>
+                <TimeField
+                  aria-label="Hora"
+                  granularity="minute"
+                  hideTimeZone
+                  value={state.timeValue}
+                  onChange={(value) => {
+                    if (value) state.setTimeValue(value);
+                  }}
+                >
+                  <TimeField.Group variant="secondary">
+                    <TimeField.Input>
+                      {(segment) => <TimeField.Segment segment={segment} />}
+                    </TimeField.Input>
+                  </TimeField.Group>
+                </TimeField>
+              </div>
+            </DatePicker.Popover>
+          </>
+        )}
       </DatePicker>
 
       {error ? <p className="text-sm text-danger">{error}</p> : null}
