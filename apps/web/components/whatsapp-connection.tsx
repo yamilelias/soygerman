@@ -42,6 +42,7 @@ export function WhatsAppConnection() {
   const [pending, startTransition] = useTransition();
   const sawProgress = useRef(false);
   const ignoreDisconnect = useRef(false);
+  const resumed = useRef(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -49,12 +50,17 @@ export function WhatsAppConnection() {
     let active = true;
 
     async function readSession(userId: string) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("whatsapp_sessions")
         .select("id, user_id, status, qr_code_base64, updated_at")
         .eq("user_id", userId)
         .maybeSingle();
-      if (active) setSession(data as WhatsAppSession | null);
+      if (!active) return;
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      setSession(data as WhatsAppSession | null);
     }
 
     async function load() {
@@ -103,7 +109,6 @@ export function WhatsAppConnection() {
     if (PAIRING_STATUSES.includes(session.status)) {
       if (ignoreDisconnect.current) return;
       sawProgress.current = true;
-      setLinking(true);
       return;
     }
     if (session.status === "connected") {
@@ -121,6 +126,21 @@ export function WhatsAppConnection() {
       ignoreDisconnect.current = false;
     }
   }, [session]);
+
+  useEffect(() => {
+    if (loading || resumed.current || !session) return;
+    if (!PAIRING_STATUSES.includes(session.status)) return;
+    resumed.current = true;
+    setLinking(true);
+    startTransition(async () => {
+      const result = await connectWhatsApp();
+      if (result.error) {
+        resumed.current = false;
+        setLinking(false);
+        setError(result.error);
+      }
+    });
+  }, [loading, session]);
 
   function run(action: () => Promise<{ error?: string; ok?: true }>) {
     setError(null);
@@ -230,11 +250,8 @@ export function WhatsAppConnection() {
 
         <div className="flex flex-wrap gap-2">
           {status !== "connected" ? (
-            <Button
-              isDisabled={pending || showPairing}
-              onPress={startConnect}
-            >
-              {showPairing ? "Vinculando..." : "Vincular WhatsApp"}
+            <Button isDisabled={pending || linking} onPress={startConnect}>
+              {linking ? "Vinculando..." : "Vincular WhatsApp"}
             </Button>
           ) : (
             <Button
