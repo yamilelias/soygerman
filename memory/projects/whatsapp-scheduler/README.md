@@ -17,4 +17,4 @@ Estado: activo. La web y el worker están en producción. Auth, WhatsApp y el en
 
 ## Siguiente
 
-Anotar la URL del worker, abrir las redirect URLs y probar el recorrido real. El detalle operativo está en `memory/references/sops/`.
+El worker público es `https://webservice.soygerman.com`. Falta alinear las redirect URLs y probar el recorrido real. El detalle operativo está en `memory/references/sops/`.

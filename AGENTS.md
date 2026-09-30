@@ -38,7 +38,7 @@ No hay habilidades todavía. El directorio `memory/skills/` queda vacío a prop�
 
 - Aplicar el SMTP de Resend en Supabase y permitir la URL de producción.
 - Probar el magic link de punta a punta.
-- Anotar la URL del worker de Render y comprobar `GET /health`.
+- La URL del worker ya está anotada: `https://webservice.soygerman.com`. `GET /health` responde.
 - Verificar QR, sincronización de chats, agenda y cancelación.
 
 ## Historial
