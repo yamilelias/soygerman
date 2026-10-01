@@ -32,7 +32,7 @@ export type MessageStatus =
 export type ScheduledMessage = {
   id: string;
   user_id: string;
-  chat_id: string;
+  chat_id: string | null;
   message_body: string;
   scheduled_at: string;
   status: MessageStatus;

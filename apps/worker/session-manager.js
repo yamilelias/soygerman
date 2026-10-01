@@ -204,10 +204,7 @@ class SessionManager {
       if (current.status === "ready") {
         current.closing = true;
         this.clients.delete(userId);
-        void this.upsertSession(userId, {
-          status: "disconnected",
-          qr_code_base64: null,
-        });
+        void this.markDisconnected(userId);
         void this.safeDestroy(client);
         return;
       }
@@ -255,10 +252,7 @@ class SessionManager {
 
     if (attempt >= MAX_LINK_ATTEMPTS) {
       this.clients.delete(userId);
-      await this.upsertSession(userId, {
-        status: "disconnected",
-        qr_code_base64: null,
-      });
+      await this.markDisconnected(userId);
       log("reintento", `${userId} agotado tras ${attempt} intentos`);
       return;
     }
@@ -285,10 +279,42 @@ class SessionManager {
         await this.safeDestroy(entry.client);
       }
     }
+    await this.markDisconnected(userId);
+  }
+
+  async markDisconnected(userId) {
     await this.upsertSession(userId, {
       status: "disconnected",
       qr_code_base64: null,
     });
+    await this.clearChats(userId);
+  }
+
+  async clearChats(userId) {
+    const { error: messageError } = await this.supabase
+      .from("scheduled_messages")
+      .update({
+        status: "failed",
+        error_message: "WhatsApp se desconectó",
+      })
+      .eq("user_id", userId)
+      .in("status", ["pending", "processing"]);
+    if (messageError) {
+      log(
+        "chats",
+        `no se cerraron pendientes ${userId}: ${messageError.message}`,
+      );
+    }
+
+    const { error } = await this.supabase
+      .from("chats")
+      .delete()
+      .eq("user_id", userId);
+    if (error) {
+      log("chats", `no se borraron ${userId}: ${error.message}`);
+      return;
+    }
+    log("chats", `${userId} borrados`);
   }
 
   async syncChats(userId) {

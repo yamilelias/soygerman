@@ -58,7 +58,14 @@ export async function connectWhatsApp() {
 }
 
 export async function disconnectWhatsApp() {
-  return callWorker("/sessions/disconnect");
+  const result = await callWorker("/sessions/disconnect");
+  if ("ok" in result) {
+    revalidatePath("/chats");
+    revalidatePath("/schedule");
+    revalidatePath("/pending");
+    revalidatePath("/history");
+  }
+  return result;
 }
 
 export async function syncChats() {
