@@ -15,7 +15,9 @@ const QR_MAX_RETRIES = 0;
 const MAX_LINK_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 3000;
 const STALE_INITIALIZING_MS = 120000;
+const STALE_QR_MS = 300000;
 const STALE_AUTHENTICATING_MS = 180000;
+const WATCH_MS = 8000;
 const PROFILE_LOCKS = ["SingletonLock", "SingletonCookie", "SingletonSocket"];
 
 function dataPath() {
@@ -127,8 +129,15 @@ class SessionManager {
     if (entry.status === "ready" || entry.retrying) return true;
     const age = Date.now() - entry.startedAt;
     if (entry.status === "authenticating") return age < STALE_AUTHENTICATING_MS;
+    if (entry.status === "qr") return age < STALE_QR_MS;
     if (entry.status === "initializing") return age < STALE_INITIALIZING_MS;
     return false;
+  }
+
+  stopWatch(entry) {
+    if (!entry?.watch) return;
+    clearInterval(entry.watch);
+    entry.watch = null;
   }
 
   async safeDestroy(client) {
@@ -154,6 +163,7 @@ class SessionManager {
       const failedEarly = existing.status !== "ready";
       existing.closing = true;
       existing.generation += 1;
+      this.stopWatch(existing);
       this.clients.delete(userId);
       await this.safeDestroy(existing.client);
       if (failedEarly) discardSession(userId);
@@ -194,6 +204,10 @@ class SessionManager {
       }),
       puppeteer,
       qrMaxRetries: QR_MAX_RETRIES,
+      takeoverOnConflict: true,
+      takeoverTimeoutMs: 3000,
+      deviceName: "SoyGerman",
+      browserName: "SoyGerman",
     });
 
     const entry = {
@@ -220,17 +234,33 @@ class SessionManager {
     client.on("qr", async (qr) => {
       if (!stillThisClient()) return;
       if (entry.status === "authenticating" || entry.status === "ready") return;
+      entry.status = "qr";
+      entry.startedAt = Date.now();
+      log("qr", `${userId} recibido largo=${qr.length}`);
       try {
         const dataUrl = await qrcode.toDataURL(qr);
+        if (!stillThisClient()) return;
+        if (entry.status !== "qr") {
+          log("qr", `${userId} ignorado porque el estado ya es ${entry.status}`);
+          return;
+        }
         const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
         await this.upsertSession(userId, {
           status: "qr_ready",
           qr_code_base64: base64,
         });
-        log("qr", `${userId} listo bytes=${base64.length}`);
+        log("qr", `${userId} guardado bytes=${base64.length}`);
       } catch (error) {
         log("qr", `${userId} falló: ${error.message || error}`);
       }
+    });
+
+    client.on("loading_screen", (percent, message) => {
+      log("loading_screen", `${userId} ${percent}% ${message || ""}`.trim());
+    });
+
+    client.on("change_state", (state) => {
+      log("change_state", `${userId} ${state}`);
     });
 
     client.on("authenticated", async () => {
@@ -243,6 +273,7 @@ class SessionManager {
 
     client.on("ready", async () => {
       if (!stillThisClient()) return;
+      this.stopWatch(entry);
       entry.status = "ready";
       entry.retrying = false;
       await this.upsertSession(userId, {
@@ -271,10 +302,129 @@ class SessionManager {
       this.scheduleRetry(userId, client, generation, reason);
     });
 
+    entry.watch = setInterval(() => {
+      const current = this.clients.get(userId);
+      if (
+        !current ||
+        current.client !== client ||
+        current.generation !== generation ||
+        current.closing ||
+        current.status === "ready"
+      ) {
+        this.stopWatch(current || entry);
+        return;
+      }
+      void this.watchLink(userId, client, generation);
+    }, WATCH_MS);
+
     client.initialize().catch((error) => {
       log("initialize", `${userId} falló: ${error.message || error}`);
       this.scheduleRetry(userId, client, generation, error);
     });
+  }
+
+  async watchLink(userId, client, generation) {
+    const entry = this.clients.get(userId);
+    if (
+      !entry ||
+      entry.client !== client ||
+      entry.generation !== generation ||
+      entry.closing ||
+      entry.status === "ready"
+    ) {
+      this.stopWatch(entry);
+      return;
+    }
+
+    const page = client.pupPage;
+    if (!page) {
+      log("watch", `${userId} aún sin página estado=${entry.status}`);
+      return;
+    }
+
+    if (!entry.consoleBound) {
+      entry.consoleBound = true;
+      page.on("pageerror", (error) => {
+        log("pageerror", `${userId} ${error.message || error}`);
+      });
+      page.on("console", (message) => {
+        if (message.type() !== "error") return;
+        log("console", `${userId} ${message.text().slice(0, 300)}`);
+      });
+    }
+
+    let snapshot;
+    try {
+      snapshot = await page.evaluate(() => {
+        let state = "sin-socket";
+        let hasSynced = false;
+        try {
+          const socket = window.require("WAWebSocketModel").Socket;
+          state = socket.state || "sin-estado";
+          hasSynced = Boolean(socket.hasSynced);
+        } catch {
+          state = "sin-socket";
+        }
+        const text = (document.body?.innerText || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 180);
+        return {
+          state,
+          hasSynced,
+          wwebjs: typeof window.WWebJS !== "undefined",
+          text,
+        };
+      });
+    } catch (error) {
+      log("watch", `${userId} no leyó la página: ${error.message || error}`);
+      return;
+    }
+
+    log(
+      "watch",
+      `${userId} estado=${snapshot.state} hasSynced=${snapshot.hasSynced} wwebjs=${snapshot.wwebjs} ui="${snapshot.text}"`,
+    );
+
+    if (snapshot.state === "CONFLICT" && !entry.tookOver) {
+      entry.tookOver = true;
+      log("watch", `${userId} hay otra sesión de WhatsApp Web; tomando el control`);
+      try {
+        await page.evaluate(() => {
+          window.require("WAWebSocketModel").Socket.takeover();
+        });
+      } catch (error) {
+        log("watch", `${userId} takeover falló: ${error.message || error}`);
+      }
+      return;
+    }
+
+    const linked =
+      snapshot.hasSynced ||
+      snapshot.state === "CONNECTED" ||
+      snapshot.wwebjs;
+    if (!linked || entry.nudged || entry.status === "authenticating") return;
+
+    entry.nudged = true;
+    log(
+      "watch",
+      `${userId} el navegador ya está vinculado y el evento de sincronización no llegó; continuando`,
+    );
+    try {
+      const result = await page.evaluate(() => {
+        if (typeof window.onAppStateHasSyncedEvent === "function") {
+          return window.onAppStateHasSyncedEvent();
+        }
+        return "sin-callback";
+      });
+      if (result === "sin-callback") {
+        entry.nudged = false;
+        log("watch", `${userId} el callback de sincronización todavía no existe`);
+      }
+    } catch (error) {
+      log("watch", `${userId} no pudo continuar: ${error.message || error}`);
+      entry.nudged = false;
+    }
   }
 
   scheduleRetry(userId, client, generation, reason) {
@@ -290,6 +440,7 @@ class SessionManager {
       return;
     }
     entry.retrying = true;
+    this.stopWatch(entry);
     const attempt = entry.attempt;
     void this.retry(userId, client, generation, attempt, reason);
   }
@@ -334,6 +485,7 @@ class SessionManager {
     if (entry) {
       entry.closing = true;
       entry.generation += 1;
+      this.stopWatch(entry);
       this.clients.delete(userId);
       try {
         await entry.client.logout();
