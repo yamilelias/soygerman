@@ -14,9 +14,65 @@ const UUID_PATTERN =
 const QR_MAX_RETRIES = 0;
 const MAX_LINK_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 3000;
+const STALE_INITIALIZING_MS = 120000;
+const STALE_AUTHENTICATING_MS = 180000;
+const PROFILE_LOCKS = ["SingletonLock", "SingletonCookie", "SingletonSocket"];
 
 function dataPath() {
   return process.env.WWEBJS_DATA_PATH || path.join(__dirname, ".wwebjs_auth");
+}
+
+function sessionDir(userId) {
+  return path.join(dataPath(), `session-${userId}`);
+}
+
+function releaseProfileLocks(userId) {
+  const dir = sessionDir(userId);
+  for (const name of PROFILE_LOCKS) {
+    try {
+      fs.rmSync(path.join(dir, name), { force: true });
+    } catch (error) {
+      log("perfil", `${userId} ${name}: ${error.message || error}`);
+    }
+  }
+}
+
+function stopOrphanBrowser(userId) {
+  const marker = `session-${userId}`;
+  let pids = [];
+  try {
+    pids = fs.readdirSync("/proc").filter((name) => /^\d+$/.test(name));
+  } catch {
+    return;
+  }
+  for (const pid of pids) {
+    if (Number(pid) === process.pid) continue;
+    let cmdline = "";
+    try {
+      cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
+    } catch {
+      continue;
+    }
+    const text = cmdline.replaceAll("\u0000", " ");
+    if (!text.includes(marker) || !text.toLowerCase().includes("chrom")) continue;
+    try {
+      process.kill(Number(pid), "SIGKILL");
+      log("perfil", `${userId} cerró chromium ${pid}`);
+    } catch (error) {
+      log("perfil", `${userId} no cerró ${pid}: ${error.message || error}`);
+    }
+  }
+}
+
+function discardSession(userId) {
+  stopOrphanBrowser(userId);
+  fs.rmSync(sessionDir(userId), { recursive: true, force: true });
+  log("perfil", `${userId} sesión en disco eliminada`);
+}
+
+function prepareProfile(userId) {
+  stopOrphanBrowser(userId);
+  releaseProfileLocks(userId);
 }
 
 function classifyChat(waId, isGroup) {
@@ -67,14 +123,12 @@ class SessionManager {
   }
 
   isLinkInProgress(entry) {
-    return (
-      entry &&
-      !entry.closing &&
-      (entry.retrying ||
-        entry.status === "initializing" ||
-        entry.status === "authenticating" ||
-        entry.status === "ready")
-    );
+    if (!entry || entry.closing) return false;
+    if (entry.status === "ready" || entry.retrying) return true;
+    const age = Date.now() - entry.startedAt;
+    if (entry.status === "authenticating") return age < STALE_AUTHENTICATING_MS;
+    if (entry.status === "initializing") return age < STALE_INITIALIZING_MS;
+    return false;
   }
 
   async safeDestroy(client) {
@@ -97,12 +151,15 @@ class SessionManager {
       };
     }
     if (existing) {
+      const failedEarly = existing.status !== "ready";
       existing.closing = true;
       existing.generation += 1;
       this.clients.delete(userId);
       await this.safeDestroy(existing.client);
+      if (failedEarly) discardSession(userId);
     }
 
+    prepareProfile(userId);
     log("connect", `${userId} iniciando intento 1`);
     await this.upsertSession(userId, {
       status: "connecting",
@@ -113,6 +170,7 @@ class SessionManager {
   }
 
   async launch(userId, attempt, generation = 1) {
+    prepareProfile(userId);
     const puppeteer = {
       headless: true,
       args: [
@@ -143,6 +201,7 @@ class SessionManager {
       status: "initializing",
       attempt,
       generation,
+      startedAt: Date.now(),
       closing: false,
       retrying: false,
     };
@@ -177,6 +236,7 @@ class SessionManager {
     client.on("authenticated", async () => {
       if (!stillThisClient()) return;
       entry.status = "authenticating";
+      entry.startedAt = Date.now();
       await this.upsertSession(userId, { status: "authenticating" });
       log("authenticated", userId);
     });
@@ -250,6 +310,9 @@ class SessionManager {
 
     if (!still()) return;
 
+    const current = this.clients.get(userId);
+    if (current && current.status !== "ready") discardSession(userId);
+
     if (attempt >= MAX_LINK_ATTEMPTS) {
       this.clients.delete(userId);
       await this.markDisconnected(userId);
@@ -277,6 +340,7 @@ class SessionManager {
       } catch (error) {
         log("logout", `${userId} ${error.message || error}`);
         await this.safeDestroy(entry.client);
+        discardSession(userId);
       }
     }
     await this.markDisconnected(userId);
