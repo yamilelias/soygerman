@@ -33,7 +33,7 @@ Rutas protegidas: `/dashboard`, `/chats`, `/schedule`, `/pending`, `/history`, `
 
 ## Worker
 
-Un cliente de `whatsapp-web.js` por `user_id`, con `LocalAuth({ clientId: userId })`.
+Un cliente de `whatsapp-web.js` por `user_id`, con `LocalAuth({ clientId: userId })`. El lockfile fija la 1.34.7. `authenticated` y `ready` dependen de `change:hasSynced`. Cómo se lee un intento trabado en producción está en `memory/references/sops/whatsapp-linking.md`.
 
 Endpoints, todos con `x-worker-secret` y el JWT del usuario, salvo la salud:
 

@@ -1,6 +1,8 @@
 # Worker en Render
 
-Servicio en línea desde el 2026-09-29. Workspace `tea-csp9avbgbbvc73ceiu30`. URL pública `https://webservice.soygerman.com` (CNAME a `soygerman.onrender.com`). `GET /health` responde `{"ok":true}`.
+Servicio en línea desde el 2026-09-29. Workspace `tea-csp9avbgbbvc73ceiu30`. En el tablero, el 2026-10-01, el workspace visible era Prograpp, el proyecto `prj-datlna7lot8c7382men0` y el servicio `srv-datuiq8u01pc73ajerfg` (`https://dashboard.render.com/web/srv-datuiq8u01pc73ajerfg`). URL pública `https://webservice.soygerman.com` (CNAME a `soygerman.onrender.com`). `GET /health` responde `{"ok":true}`.
+
+`main` despliega solo. El evento «Deploy live for <sha>» confirma el commit que está sirviendo. El síntoma de la vinculación y las líneas `watch` están en `memory/references/sops/whatsapp-linking.md`.
 
 - Web Service, Dockerfile `apps/worker/Dockerfile`, contexto `apps/worker`.
 - Disco persistente en `/data`. `WWEBJS_DATA_PATH=/data/wwebjs`.

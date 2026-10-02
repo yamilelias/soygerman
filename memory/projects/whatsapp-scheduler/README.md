@@ -2,7 +2,7 @@
 
 La iniciativa activa de este repositorio.
 
-Estado: activo. La web y el worker están en producción. Auth, WhatsApp y el envío del cron siguen sin una prueba de punta a punta.
+Estado: activo. La web y el worker están en producción. La vinculación de `yamileliassoto@gmail.com` se probó el 2026-10-01: el teléfono llegó a listar el Chrome y la fila se quedó en `qr_ready` con el historial en pausa. El recorrido completo (sync, agenda, cancelar y cron) sigue sin cerrarse. El diagnóstico está en `memory/references/sops/whatsapp-linking.md`.
 
 ## Hecho
 
@@ -14,6 +14,7 @@ Estado: activo. La web y el worker están en producción. Auth, WhatsApp y el en
 
 - 2026-09-28: primer despliegue de producción, después de corregir `lightningcss` en Linux.
 - 2026-09-29: el worker quedó en línea en Render y se actualizaron las variables de Vercel y Render.
+- 2026-10-01: desconectar borra los chats; el perfil de Chromium se limpia antes de reabrir; el worker registra el socket cada 8 s. Render auto-desplegó `fe421ed`.
 
 ## Siguiente
 
