@@ -77,6 +77,16 @@ function prepareProfile(userId) {
   releaseProfileLocks(userId);
 }
 
+function browserStillOpen(client, page) {
+  try {
+    if (!client.pupBrowser || !client.pupBrowser.isConnected()) return false;
+    if (page && page.isClosed()) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function classifyChat(waId, isGroup) {
   if (!waId || waId === "status@broadcast" || waId.endsWith("@broadcast")) {
     return null;
@@ -377,7 +387,12 @@ class SessionManager {
         };
       });
     } catch (error) {
-      log("watch", `${userId} no leyó la página: ${error.message || error}`);
+      const message = error.message || String(error);
+      if (!browserStillOpen(client, page)) {
+        this.recoverClosedBrowser(userId, client, generation, message);
+        return;
+      }
+      log("watch", `${userId} no leyó la página: ${message}`);
       return;
     }
 
@@ -399,11 +414,29 @@ class SessionManager {
       return;
     }
 
-    const linked =
-      snapshot.hasSynced ||
-      snapshot.state === "CONNECTED" ||
-      snapshot.wwebjs;
-    if (!linked || entry.nudged || entry.status === "authenticating") return;
+    const synced = snapshot.hasSynced || snapshot.state === "CONNECTED";
+    if (!synced) {
+      entry.syncedSeen = 0;
+      return;
+    }
+    entry.syncedSeen = (entry.syncedSeen || 0) + 1;
+
+    // WWebJS aparece cuando el callback de la librería ya inyectó la página.
+    // Llamarlo otra vez reentra en Runtime.addBinding y cierra el target.
+    if (
+      entry.nudged ||
+      entry.status === "authenticating" ||
+      snapshot.wwebjs
+    ) {
+      return;
+    }
+    if (entry.syncedSeen < 2) {
+      log(
+        "watch",
+        `${userId} el socket ya está vinculado; esperando otra lectura antes de continuar`,
+      );
+      return;
+    }
 
     entry.nudged = true;
     log(
@@ -411,20 +444,40 @@ class SessionManager {
       `${userId} el navegador ya está vinculado y el evento de sincronización no llegó; continuando`,
     );
     try {
+      if (!browserStillOpen(client, page)) {
+        this.recoverClosedBrowser(userId, client, generation, "página cerrada");
+        return;
+      }
+      // No esperar el binding: onAppStateHasSyncedEvent vuelve a evaluar la
+      // página. Si este evaluate lo espera, Puppeteer cierra el target
+      // (Runtime.addBinding) justo cuando el QR acaba de escanearse.
       const result = await page.evaluate(() => {
-        if (typeof window.onAppStateHasSyncedEvent === "function") {
-          return window.onAppStateHasSyncedEvent();
+        if (typeof window.onAppStateHasSyncedEvent !== "function") {
+          return "sin-callback";
         }
-        return "sin-callback";
+        setTimeout(() => {
+          window.onAppStateHasSyncedEvent();
+        }, 0);
+        return "ok";
       });
       if (result === "sin-callback") {
         entry.nudged = false;
         log("watch", `${userId} el callback de sincronización todavía no existe`);
       }
     } catch (error) {
-      log("watch", `${userId} no pudo continuar: ${error.message || error}`);
       entry.nudged = false;
+      const message = error.message || String(error);
+      if (!browserStillOpen(client, page)) {
+        this.recoverClosedBrowser(userId, client, generation, message);
+        return;
+      }
+      log("watch", `${userId} no pudo continuar: ${message}`);
     }
+  }
+
+  recoverClosedBrowser(userId, client, generation, reason) {
+    log("watch", `${userId} el navegador se cerró: ${reason}`);
+    this.scheduleRetry(userId, client, generation, reason);
   }
 
   scheduleRetry(userId, client, generation, reason) {
