@@ -18,6 +18,9 @@ const STALE_INITIALIZING_MS = 120000;
 const STALE_QR_MS = 300000;
 const STALE_AUTHENTICATING_MS = 180000;
 const WATCH_MS = 8000;
+const MEMORY_MS = 2000;
+const SMALL_CONTAINER_KB = 900 * 1024;
+const LOW_FREE_KB = 72 * 1024;
 const PROFILE_LOCKS = ["SingletonLock", "SingletonCookie", "SingletonSocket"];
 
 function dataPath() {
@@ -75,6 +78,120 @@ function discardSession(userId) {
 function prepareProfile(userId) {
   stopOrphanBrowser(userId);
   releaseProfileLocks(userId);
+}
+
+function readyMarkerPath(userId) {
+  return path.join(sessionDir(userId), ".ready");
+}
+
+function markProfileReady(userId) {
+  try {
+    fs.mkdirSync(sessionDir(userId), { recursive: true });
+    fs.writeFileSync(readyMarkerPath(userId), "");
+  } catch (error) {
+    log("perfil", `${userId} no marcó la sesión: ${error.message || error}`);
+  }
+}
+
+function mbFromKb(kb) {
+  return Math.round(kb / 1024);
+}
+
+function chromiumRssKb() {
+  let total = 0;
+  let pids = [];
+  try {
+    pids = fs.readdirSync("/proc").filter((name) => /^\d+$/.test(name));
+  } catch {
+    return 0;
+  }
+  for (const pid of pids) {
+    if (Number(pid) === process.pid) continue;
+    let cmdline = "";
+    try {
+      cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
+    } catch {
+      continue;
+    }
+    if (!cmdline.toLowerCase().includes("chrom")) continue;
+    try {
+      const status = fs.readFileSync(`/proc/${pid}/status`, "utf8");
+      const match = status.match(/VmRSS:\s+(\d+)/);
+      if (match) total += Number(match[1]);
+    } catch {
+      continue;
+    }
+  }
+  return total;
+}
+
+function readMemory() {
+  let totalKb = 0;
+  let availableKb = 0;
+  try {
+    const text = fs.readFileSync("/proc/meminfo", "utf8");
+    const total = text.match(/MemTotal:\s+(\d+)/);
+    const available = text.match(/MemAvailable:\s+(\d+)/);
+    totalKb = total ? Number(total[1]) : 0;
+    availableKb = available ? Number(available[1]) : 0;
+  } catch {
+    totalKb = 0;
+    availableKb = 0;
+  }
+  return {
+    totalKb,
+    availableKb,
+    rssKb: Math.round(process.memoryUsage().rss / 1024),
+    chromeKb: chromiumRssKb(),
+  };
+}
+
+function describeMemory(snap = readMemory()) {
+  if (!snap.totalKb) return "memoria no disponible";
+  return `memoria total=${mbFromKb(snap.totalKb)}MB libre=${mbFromKb(snap.availableKb)}MB node=${mbFromKb(snap.rssKb)}MB chrome=${mbFromKb(snap.chromeKb)}MB`;
+}
+
+function underMemoryPressure(snap) {
+  if (!snap.totalKb) return false;
+  const usedKb = snap.rssKb + snap.chromeKb;
+  return snap.availableKb < LOW_FREE_KB || usedKb > snap.totalKb * 0.9;
+}
+
+function chromiumLaunchOptions() {
+  const snap = readMemory();
+  const small = snap.totalKb > 0 && snap.totalKb < SMALL_CONTAINER_KB;
+  const args = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--disable-software-rasterizer",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--disable-default-apps",
+    "--disable-sync",
+    "--disable-translate",
+    "--mute-audio",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-hang-monitor",
+    "--disable-component-update",
+    "--disable-domain-reliability",
+    "--renderer-process-limit=1",
+    "--disable-features=IsolateOrigins,site-per-process,Translate,AudioServiceOutOfProcess",
+  ];
+  if (small) {
+    args.push(
+      "--no-zygote",
+      "--single-process",
+      "--js-flags=--max-old-space-size=192",
+    );
+  }
+  const puppeteer = { headless: true, args };
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    puppeteer.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  return { puppeteer, small, snap };
 }
 
 function browserStillOpen(client, page) {
@@ -150,6 +267,12 @@ class SessionManager {
     entry.watch = null;
   }
 
+  stopMemory(entry) {
+    if (!entry?.memoryWatch) return;
+    clearInterval(entry.memoryWatch);
+    entry.memoryWatch = null;
+  }
+
   async safeDestroy(client) {
     try {
       await client.destroy();
@@ -174,6 +297,7 @@ class SessionManager {
       existing.closing = true;
       existing.generation += 1;
       this.stopWatch(existing);
+      this.stopMemory(existing);
       this.clients.delete(userId);
       await this.safeDestroy(existing.client);
       if (failedEarly) discardSession(userId);
@@ -191,20 +315,28 @@ class SessionManager {
 
   async launch(userId, attempt, generation = 1) {
     prepareProfile(userId);
-    const puppeteer = {
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-      ],
-    };
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-      puppeteer.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    const { puppeteer, small, snap } = chromiumLaunchOptions();
+    if (underMemoryPressure(snap)) {
+      const current = this.clients.get(userId);
+      if (current && current.generation === generation) {
+        current.closing = true;
+        this.stopWatch(current);
+        this.stopMemory(current);
+        this.clients.delete(userId);
+      }
+      log(
+        "memoria",
+        `${userId} no abre Chromium porque ya no queda sitio ${describeMemory(snap)}`,
+      );
+      await this.upsertSession(userId, {
+        status: "disconnected",
+        qr_code_base64: null,
+      });
+      return;
     }
     log(
       "launch",
-      `${userId} intento ${attempt} chrome ${puppeteer.executablePath || "puppeteer"}`,
+      `${userId} intento ${attempt} ${small ? "chromium ajustado" : "chromium"} ${describeMemory(snap)}`,
     );
 
     const client = new Client({
@@ -286,11 +418,12 @@ class SessionManager {
       this.stopWatch(entry);
       entry.status = "ready";
       entry.retrying = false;
+      markProfileReady(userId);
       await this.upsertSession(userId, {
         status: "connected",
         qr_code_base64: null,
       });
-      log("ready", userId);
+      log("ready", `${userId} ${describeMemory()}`);
     });
 
     client.on("auth_failure", (message) => {
@@ -304,6 +437,7 @@ class SessionManager {
       if (!current || current.client !== client || current.closing) return;
       if (current.status === "ready") {
         current.closing = true;
+        this.stopMemory(current);
         this.clients.delete(userId);
         void this.markDisconnected(userId);
         void this.safeDestroy(client);
@@ -326,6 +460,10 @@ class SessionManager {
       }
       void this.watchLink(userId, client, generation);
     }, WATCH_MS);
+
+    entry.memoryWatch = setInterval(() => {
+      void this.guardMemory(userId, client, generation);
+    }, MEMORY_MS);
 
     client.initialize().catch((error) => {
       log("initialize", `${userId} falló: ${error.message || error}`);
@@ -398,7 +536,7 @@ class SessionManager {
 
     log(
       "watch",
-      `${userId} estado=${snapshot.state} hasSynced=${snapshot.hasSynced} wwebjs=${snapshot.wwebjs} ui="${snapshot.text}"`,
+      `${userId} estado=${snapshot.state} hasSynced=${snapshot.hasSynced} wwebjs=${snapshot.wwebjs} ui="${snapshot.text}" ${describeMemory()}`,
     );
 
     if (snapshot.state === "CONFLICT" && !entry.tookOver) {
@@ -476,8 +614,57 @@ class SessionManager {
   }
 
   recoverClosedBrowser(userId, client, generation, reason) {
+    const snap = readMemory();
+    if (underMemoryPressure(snap)) {
+      log("watch", `${userId} el navegador se cerró sin memoria: ${reason}`);
+      void this.releaseForMemory(userId, client, generation, snap);
+      return;
+    }
     log("watch", `${userId} el navegador se cerró: ${reason}`);
     this.scheduleRetry(userId, client, generation, reason);
+  }
+
+  async guardMemory(userId, client, generation) {
+    const entry = this.clients.get(userId);
+    if (
+      !entry ||
+      entry.client !== client ||
+      entry.generation !== generation ||
+      entry.closing ||
+      entry.retrying
+    ) {
+      this.stopMemory(entry);
+      return;
+    }
+    const snap = readMemory();
+    if (!underMemoryPressure(snap)) return;
+    await this.releaseForMemory(userId, client, generation, snap);
+  }
+
+  async releaseForMemory(userId, client, generation, snap) {
+    const entry = this.clients.get(userId);
+    if (
+      !entry ||
+      entry.client !== client ||
+      entry.generation !== generation ||
+      entry.closing
+    ) {
+      return;
+    }
+    const wasReady = entry.status === "ready";
+    entry.closing = true;
+    entry.generation += 1;
+    this.stopWatch(entry);
+    this.stopMemory(entry);
+    this.clients.delete(userId);
+    log(
+      "memoria",
+      `${userId} se cierra Chromium para que el servicio no se reinicie ${describeMemory(snap)}`,
+    );
+    await this.safeDestroy(client);
+    stopOrphanBrowser(userId);
+    if (!wasReady) discardSession(userId);
+    await this.markDisconnected(userId);
   }
 
   scheduleRetry(userId, client, generation, reason) {
@@ -494,6 +681,7 @@ class SessionManager {
     }
     entry.retrying = true;
     this.stopWatch(entry);
+    this.stopMemory(entry);
     const attempt = entry.attempt;
     void this.retry(userId, client, generation, attempt, reason);
   }
@@ -539,6 +727,7 @@ class SessionManager {
       entry.closing = true;
       entry.generation += 1;
       this.stopWatch(entry);
+      this.stopMemory(entry);
       this.clients.delete(userId);
       try {
         await entry.client.logout();
@@ -652,10 +841,19 @@ class SessionManager {
       if (!entry.isDirectory() || !entry.name.startsWith("session-")) continue;
       const userId = entry.name.slice("session-".length);
       if (!UUID_PATTERN.test(userId)) continue;
-      log("restore", userId);
+      const profile = path.join(directory, entry.name);
+      if (!fs.existsSync(path.join(profile, ".ready"))) {
+        log(
+          "restore",
+          `${userId} sin sesión lista; se borra el perfil a medias ${describeMemory()}`,
+        );
+        fs.rmSync(profile, { recursive: true, force: true });
+        continue;
+      }
+      log("restore", `${userId} ${describeMemory()}`);
       await this.connect(userId);
     }
   }
 }
 
-module.exports = { SessionManager };
+module.exports = { SessionManager, describeMemory };

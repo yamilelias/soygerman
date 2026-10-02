@@ -4,7 +4,7 @@ const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
-const { SessionManager } = require("./session-manager");
+const { SessionManager, describeMemory } = require("./session-manager");
 const { requireUser } = require("./auth");
 const { startCron } = require("./cron");
 const { log } = require("./log");
@@ -89,7 +89,7 @@ app.listen(port, () => {
   const chrome = process.env.PUPPETEER_EXECUTABLE_PATH || "";
   log(
     "arranque",
-    `puerto ${port} origen ${process.env.WEB_ORIGIN || "http://localhost:3000"} chrome ${chrome || "el de puppeteer"} ${chrome ? (fs.existsSync(chrome) ? "encontrado" : "no existe") : ""}`.trim(),
+    `puerto ${port} origen ${process.env.WEB_ORIGIN || "http://localhost:3000"} chrome ${chrome || "el de puppeteer"} ${chrome ? (fs.existsSync(chrome) ? "encontrado" : "no existe") : ""} ${describeMemory()}`.trim(),
   );
   startCron(supabase, sessions);
   sessions.restoreSessions().catch((error) => {
