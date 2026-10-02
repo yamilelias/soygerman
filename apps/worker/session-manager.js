@@ -204,6 +204,14 @@ function browserStillOpen(client, page) {
   }
 }
 
+function linkStatusForEntry(entry) {
+  if (!entry || entry.closing) return "interrupted";
+  if (entry.status === "ready") return "connected";
+  if (entry.status === "qr") return "qr_ready";
+  if (entry.status === "authenticating") return "authenticating";
+  return "connecting";
+}
+
 function classifyChat(waId, isGroup) {
   if (!waId || waId === "status@broadcast" || waId.endsWith("@broadcast")) {
     return null;
@@ -224,6 +232,7 @@ class SessionManager {
   constructor(supabase) {
     this.supabase = supabase;
     this.clients = new Map();
+    this.restoreFinished = false;
   }
 
   getClient(userId) {
@@ -407,6 +416,7 @@ class SessionManager {
 
     client.on("authenticated", async () => {
       if (!stillThisClient()) return;
+      if (entry.status === "ready") return;
       entry.status = "authenticating";
       entry.startedAt = Date.now();
       await this.upsertSession(userId, { status: "authenticating" });
@@ -439,7 +449,7 @@ class SessionManager {
         current.closing = true;
         this.stopMemory(current);
         this.clients.delete(userId);
-        void this.markDisconnected(userId);
+        void this.markClosed(userId, "interrupted");
         void this.safeDestroy(client);
         return;
       }
@@ -661,10 +671,13 @@ class SessionManager {
       "memoria",
       `${userId} se cierra Chromium para que el servicio no se reinicie ${describeMemory(snap)}`,
     );
-    await this.safeDestroy(client);
-    stopOrphanBrowser(userId);
-    if (!wasReady) discardSession(userId);
-    await this.markDisconnected(userId);
+    try {
+      await this.markClosed(userId, "interrupted");
+    } finally {
+      await this.safeDestroy(client);
+      stopOrphanBrowser(userId);
+      if (!wasReady) discardSession(userId);
+    }
   }
 
   scheduleRetry(userId, client, generation, reason) {
@@ -741,19 +754,72 @@ class SessionManager {
   }
 
   async markDisconnected(userId) {
-    await this.upsertSession(userId, {
-      status: "disconnected",
-      qr_code_base64: null,
-    });
-    await this.clearChats(userId);
+    await this.markClosed(userId, "disconnected");
   }
 
-  async clearChats(userId) {
+  async markClosed(userId, status) {
+    await this.upsertSession(userId, {
+      status,
+      qr_code_base64: null,
+    });
+    await this.clearChats(
+      userId,
+      status === "interrupted"
+        ? "La conexión de WhatsApp se interrumpió"
+        : "WhatsApp se desconectó",
+    );
+  }
+
+  async publishLinkStatus(userId, entry) {
+    const status = linkStatusForEntry(entry);
+    if (status === "connected" || status === "interrupted") return;
+    await this.upsertSession(userId, { status });
+  }
+
+  async interrupt(userId, { force = false } = {}) {
+    if (!this.restoreFinished && !force) return false;
+    const entry = this.clients.get(userId);
+    if (!force && entry?.status === "ready") return false;
+    if (!force && entry && (entry.closing || this.isLinkInProgress(entry))) {
+      return false;
+    }
+    if (entry) {
+      entry.closing = true;
+      entry.generation += 1;
+      this.stopWatch(entry);
+      this.stopMemory(entry);
+      this.clients.delete(userId);
+      void this.safeDestroy(entry.client);
+    }
+    if (this.clients.has(userId)) return false;
+
+    const { data, error } = await this.supabase
+      .from("whatsapp_sessions")
+      .select("status")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) {
+      log("sesión", `no se leyó ${userId}: ${error.message}`);
+      return false;
+    }
+    if (
+      !data ||
+      data.status === "disconnected" ||
+      data.status === "interrupted"
+    ) {
+      return false;
+    }
+    log("sesión", `${userId} pasó de ${data.status} a interrupted`);
+    await this.markClosed(userId, "interrupted");
+    return true;
+  }
+
+  async clearChats(userId, errorMessage = "WhatsApp se desconectó") {
     const { error: messageError } = await this.supabase
       .from("scheduled_messages")
       .update({
         status: "failed",
-        error_message: "WhatsApp se desconectó",
+        error_message: errorMessage,
       })
       .eq("user_id", userId)
       .in("status", ["pending", "processing"]);
@@ -778,7 +844,14 @@ class SessionManager {
   async syncChats(userId) {
     const entry = this.clients.get(userId);
     if (!entry || entry.status !== "ready") {
-      throw new Error("WhatsApp no está conectado");
+      if (entry && this.isLinkInProgress(entry)) {
+        await this.publishLinkStatus(userId, entry);
+        throw new Error("WhatsApp todavía se está conectando.");
+      }
+      await this.interrupt(userId);
+      throw new Error(
+        "La conexión con WhatsApp se interrumpió. Vuelve a vincular.",
+      );
     }
 
     log("sync", `${userId} leyendo chats`);
@@ -798,6 +871,12 @@ class SessionManager {
       });
     } catch (error) {
       log("sync", `${userId} no pudo leer chats: ${error.message || error}`);
+      if (!browserStillOpen(entry.client, entry.client.pupPage)) {
+        await this.interrupt(userId, { force: true });
+        throw new Error(
+          "La conexión con WhatsApp se interrumpió. Vuelve a vincular.",
+        );
+      }
       throw new Error("No se pudo leer la lista de chats de WhatsApp");
     }
 
@@ -833,27 +912,51 @@ class SessionManager {
   }
 
   async restoreSessions() {
-    const directory = dataPath();
-    if (!fs.existsSync(directory)) return;
-
-    const entries = fs.readdirSync(directory, { withFileTypes: true });
-    for (const entry of entries) {
-      if (!entry.isDirectory() || !entry.name.startsWith("session-")) continue;
-      const userId = entry.name.slice("session-".length);
-      if (!UUID_PATTERN.test(userId)) continue;
-      const profile = path.join(directory, entry.name);
-      if (!fs.existsSync(path.join(profile, ".ready"))) {
-        log(
-          "restore",
-          `${userId} sin sesión lista; se borra el perfil a medias ${describeMemory()}`,
-        );
-        fs.rmSync(profile, { recursive: true, force: true });
-        continue;
+    try {
+      const directory = dataPath();
+      if (fs.existsSync(directory)) {
+        const entries = fs.readdirSync(directory, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory() || !entry.name.startsWith("session-")) {
+            continue;
+          }
+          const userId = entry.name.slice("session-".length);
+          if (!UUID_PATTERN.test(userId)) continue;
+          const profile = path.join(directory, entry.name);
+          if (!fs.existsSync(path.join(profile, ".ready"))) {
+            log(
+              "restore",
+              `${userId} sin sesión lista; se borra el perfil a medias ${describeMemory()}`,
+            );
+            fs.rmSync(profile, { recursive: true, force: true });
+            continue;
+          }
+          log("restore", `${userId} ${describeMemory()}`);
+          await this.connect(userId);
+        }
       }
-      log("restore", `${userId} ${describeMemory()}`);
-      await this.connect(userId);
+    } catch (error) {
+      log("restore", error.message || String(error));
+    } finally {
+      this.restoreFinished = true;
+    }
+    await this.reconcileStaleSessions();
+  }
+
+  async reconcileStaleSessions() {
+    const { data, error } = await this.supabase
+      .from("whatsapp_sessions")
+      .select("user_id")
+      .eq("status", "connected");
+    if (error) {
+      log("restore", `no se revisaron sesiones: ${error.message}`);
+      return;
+    }
+    for (const row of data || []) {
+      if (this.clients.has(row.user_id)) continue;
+      await this.interrupt(row.user_id);
     }
   }
 }
 
-module.exports = { SessionManager, describeMemory };
+module.exports = { SessionManager, describeMemory, linkStatusForEntry };

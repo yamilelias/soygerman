@@ -19,7 +19,12 @@ function startCron(supabase, sessions) {
     for (const message of data || []) {
       try {
         if (!sessions.isReady(message.user_id)) {
-          throw new Error("WhatsApp no está conectado para este usuario");
+          const interrupted = await sessions.interrupt(message.user_id);
+          throw new Error(
+            interrupted
+              ? "La conexión con WhatsApp se interrumpió. Vuelve a vincular."
+              : "WhatsApp no está conectado para este usuario",
+          );
         }
         const client = sessions.getClient(message.user_id);
         await client.sendMessage(message.wa_id, message.message_body);

@@ -3,7 +3,8 @@ export type WhatsAppSessionStatus =
   | "connecting"
   | "qr_ready"
   | "authenticating"
-  | "connected";
+  | "connected"
+  | "interrupted";
 
 export type WhatsAppSession = {
   id: string;

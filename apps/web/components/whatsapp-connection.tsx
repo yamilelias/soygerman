@@ -18,6 +18,7 @@ const statusLabel: Record<WhatsAppSessionStatus, string> = {
   qr_ready: "Esperando escaneo",
   authenticating: "Conectando",
   connected: "Conectado",
+  interrupted: "Interrumpida",
 };
 
 const statusColor = {
@@ -26,6 +27,7 @@ const statusColor = {
   qr_ready: "warning",
   authenticating: "warning",
   connected: "success",
+  interrupted: "danger",
 } as const;
 
 const PAIRING_STATUSES: WhatsAppSessionStatus[] = [
@@ -43,6 +45,7 @@ export function WhatsAppConnection() {
   const sawProgress = useRef(false);
   const ignoreDisconnect = useRef(false);
   const resumed = useRef(false);
+  const previousStatus = useRef<WhatsAppSessionStatus | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -106,15 +109,32 @@ export function WhatsAppConnection() {
 
   useEffect(() => {
     if (!session) return;
+    const previous = previousStatus.current;
+    previousStatus.current = session.status;
+
+    if (session.status === "interrupted") {
+      sawProgress.current = false;
+      ignoreDisconnect.current = false;
+      setLinking(false);
+      if (previous !== "interrupted") setError(null);
+      return;
+    }
     if (PAIRING_STATUSES.includes(session.status)) {
       if (ignoreDisconnect.current) return;
       sawProgress.current = true;
+      if (
+        previous === "connected" ||
+        previous === "interrupted"
+      ) {
+        setError(null);
+      }
       return;
     }
     if (session.status === "connected") {
       sawProgress.current = false;
       ignoreDisconnect.current = false;
       setLinking(false);
+      if (previous && previous !== "connected") setError(null);
       return;
     }
     if (session.status === "disconnected" && sawProgress.current) {
@@ -243,6 +263,13 @@ export function WhatsAppConnection() {
             Conexión exitosa. La sesión está activa. Sincroniza para traer
             chats individuales y grupos. No se descarga el historial de
             mensajes.
+          </p>
+        ) : null}
+
+        {status === "interrupted" ? (
+          <p className="text-sm text-danger">
+            La conexión se interrumpió. WhatsApp ya no está listo. Vuelve a
+            vincular para continuar.
           </p>
         ) : null}
 
