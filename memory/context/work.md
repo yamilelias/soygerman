@@ -44,7 +44,7 @@ Endpoints, todos con `x-worker-secret` y el JWT del usuario, salvo la salud:
 
 El sync guarda grupos `@g.us` y chats directos `@c.us`, `@s.whatsapp.net` y `@lid`. Ignora `@broadcast` y `@newsletter`. Upsert por `(user_id, wa_id)` en lotes de 200.
 
-El cron es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` con «WhatsApp no está conectado para este usuario». Si sale, `sent`. Si `sendMessage` falla, `failed` y el error se corta a 500 caracteres. Un envío puede retrasarse hasta unos 60 segundos. Cada Chromium activo pide cerca de 1 GB de RAM.
+El cron es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` con «WhatsApp no está conectado para este usuario». Si sale, `sent`. Si `sendMessage` falla, `failed` y el error se corta a 500 caracteres. Un envío puede retrasarse hasta unos 60 segundos. Sin ajuste, cada Chromium pide cerca de 1 GB. Con menos de 900 MB en el contenedor arranca en un solo proceso, y se cierra si la memoria libre baja de 72 MB para que Render no reinicie el servicio.
 
 ## Dónde corre
 
