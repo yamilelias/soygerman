@@ -13,10 +13,10 @@ El 2026-09-28 el servidor local del puerto 3000 y el worker de prueba se detuvie
 
 `apps/web/.env.local` usa `WORKER_URL=http://localhost:3001`. El sitio de producción habla con el worker de Render. Un QR probado en `https://www.soygerman.com` no pasa por el proceso local.
 
-Sin `apps/worker/.env` el worker sale al arrancar. Ahí van el service role de Supabase, el mismo `WORKER_API_SECRET` que la web, y `PUPPETEER_EXECUTABLE_PATH`. Puppeteer no descarga Chromium: lo dice `apps/worker/.npmrc`. La ruta de Chrome en esta máquina está en `memory/local.md`.
+Sin `apps/worker/.env` el worker sale al arrancar. Ahí van el service role de Supabase y el mismo `WORKER_API_SECRET` que la web. Las credenciales locales quedan en `apps/worker/.baileys` si no se define `BAILEYS_DATA_PATH`.
 
 ## Recargar el worker
 
-`node --watch` no siempre vuelve a cargar `session-manager.js` mientras Chromium sigue abierto. El proceso viejo responde `GET /health` y el código nuevo no corre. Un SIGTERM no lo suelta. Hay que matar el `node index.js` hijo con `kill -9`. El `--watch` padre levanta otro y restaura el perfil.
+`node --watch` no siempre vuelve a cargar `session-manager.js` si el proceso se queda ocupado. El proceso viejo responde `GET /health` y el código nuevo no corre. Un SIGTERM no lo suelta. Hay que matar el `node index.js` hijo con `kill -9`. El `--watch` padre levanta otro y restaura la credencial si ya estaba registrada.
 
 El 2026-09-29 el proceso de las 16:42 siguió sirviendo `POST /sync-chats` después de guardar el arreglo a las 17:00. El 500 era el código anterior.

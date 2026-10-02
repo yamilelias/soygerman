@@ -2,7 +2,7 @@
 
 La iniciativa activa de este repositorio.
 
-Estado: activo. La web y el worker están en producción. La vinculación de `yamileliassoto@gmail.com` se probó el 2026-10-01: el teléfono llegó a listar el Chrome y la fila se quedó en `qr_ready` con el historial en pausa. El recorrido completo (sync, agenda, cancelar y cron) sigue sin cerrarse. El diagnóstico está en `memory/references/sops/whatsapp-linking.md`.
+Estado: activo. La web y el worker están en producción. El worker ya no abre Chromium. La vinculación de `yamileliassoto@gmail.com` del 2026-10-01 se quedó en `qr_ready` porque el navegador no cabía en 512 MB. Hay que escanear el QR otra vez. El recorrido completo (sync, agenda, cancelar y cron) sigue sin cerrarse. El diagnóstico viejo está en `memory/references/sops/whatsapp-linking.md`.
 
 ## Hecho
 

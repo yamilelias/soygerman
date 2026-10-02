@@ -26,7 +26,7 @@ La pantalla sale de `callWorker` en `apps/web/app/actions/worker.ts`. Tres texto
 
 El 2026-09-29 el clic en producción cayó en el segundo caso. El log fue `Failed to parse URL from webservice.soygerman.com/sessions/connect`. `WORKER_URL` era el host pelado. En local era `http://localhost:3001`, con esquema, y por eso ahí sí funcionaba. `GET https://webservice.soygerman.com/health` ya respondía `{"ok":true}`. El 2026-09-30 se guardó `https://webservice.soygerman.com` en Production y Preview y se redesplegó el despliegue de entonces. El alias quedó en `https://www.soygerman.com`.
 
-`POST /sessions/connect` responde en cuanto deja el cliente arrancando. No espera a Chromium. Un fallo instantáneo de «no se pudo contactar» es la URL o la red, no el QR.
+`POST /sessions/connect` responde en cuanto deja el socket arrancando. No espera a que WhatsApp quede vinculado. Un fallo instantáneo de «no se pudo contactar» es la URL o la red, no el QR.
 
 `WORKER_URL` y `WORKER_API_SECRET` son Secret. `vercel env pull --environment production` escribe `[SENSITIVE]` y no muestra el valor. El log de la función sí imprime la URL armada, sin el secreto.
 

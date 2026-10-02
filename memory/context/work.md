@@ -5,7 +5,7 @@ PWA para agendar mensajes de WhatsApp. Un worker con sesión persistente los env
 ## Piezas
 
 - `apps/web`: Next.js 16.3.6, React 19, Tailwind 4, HeroUI 3.2.6, Supabase (`@supabase/ssr`), PWA con `@ducanh2912/next-pwa`.
-- `apps/worker`: Express, `whatsapp-web.js`, Puppeteer, `node-cron`, cliente de Supabase con service role.
+- `apps/worker`: Express, Baileys 7.0.0-rc14, `node-cron`, cliente de Supabase con service role.
 - `supabase/migrations/20260928120000_init.sql`: esquema aplicado en el proyecto remoto.
 
 Workspaces npm en la raíz: `dev:web`, `dev:worker`, `build:web`, `start:worker`.
@@ -33,7 +33,7 @@ Rutas protegidas: `/dashboard`, `/chats`, `/schedule`, `/pending`, `/history`, `
 
 ## Worker
 
-Un cliente de `whatsapp-web.js` por `user_id`, con `LocalAuth({ clientId: userId })`. El lockfile fija la 1.34.7. `authenticated` y `ready` dependen de `change:hasSynced`. Cómo se lee un intento trabado en producción está en `memory/references/sops/whatsapp-linking.md`.
+Un socket de Baileys por `user_id`. Las credenciales viven en `BAILEYS_DATA_PATH/session-<user_id>` (`useMultiFileAuthState`). No abre Chromium. El historial completo no se pide (`syncType` FULL se rechaza; el bootstrap y lo reciente sí, para LID y grupos). El dispositivo se anuncia como SoyGerman. Cómo se leía un intento trabado con Puppeteer está en `memory/references/sops/whatsapp-linking.md`.
 
 Endpoints, todos con `x-worker-secret` y el JWT del usuario, salvo la salud:
 
@@ -42,21 +42,21 @@ Endpoints, todos con `x-worker-secret` y el JWT del usuario, salvo la salud:
 - `POST /sessions/disconnect`
 - `POST /sync-chats`
 
-El sync guarda grupos `@g.us` y chats directos `@c.us`, `@s.whatsapp.net` y `@lid`. Ignora `@broadcast` y `@newsletter`. Upsert por `(user_id, wa_id)` en lotes de 200. No usa `client.getChats()`: esa llamada pide metadatos de grupo y el último mensaje de cada chat, y un solo fallo responde 500. Lee `WAWebCollections.Chat.getModelsArray()` y se queda con el id, el nombre y si es grupo. Deduplica `wa_id` antes del upsert.
+El sync guarda grupos `@g.us` y chats directos `@c.us`, `@s.whatsapp.net` y `@lid`. Ignora `@broadcast` y `@newsletter`. Upsert por `(user_id, wa_id)` en lotes de 200. Junta lo que Baileys emite en chats y contactos, más `groupFetchAllParticipating`, y se queda con el id, el nombre y si es grupo.
 
-El cron es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` con «WhatsApp no está conectado para este usuario». Si sale, `sent`. Si `sendMessage` falla, `failed` y el error se corta a 500 caracteres. Un envío puede retrasarse hasta unos 60 segundos. Sin ajuste, cada Chromium pide cerca de 1 GB. Con menos de 900 MB en el contenedor arranca en un solo proceso, y se cierra si la memoria libre baja de 72 MB para que Render no reinicie el servicio.
+El cron es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` con «WhatsApp no está conectado para este usuario». Si sale, `sent`. Si `sendMessage` falla, `failed` y el error se corta a 500 caracteres. Un envío puede retrasarse hasta unos 60 segundos. Un `@c.us` guardado antes se manda como `@s.whatsapp.net`. Cada 8 s, mientras vincula, el worker anota la RAM del proceso.
 
 ## Dónde corre
 
 - Web en Vercel, producción `https://www.soygerman.com` (el apex redirige ahí; `https://soygerman-rose.vercel.app` sigue activo). Directorio raíz `apps/web`. El build es `next build --webpack`.
-- Worker en Render, workspace `tea-csp9avbgbbvc73ceiu30`, en línea desde el 2026-09-29. URL pública `https://webservice.soygerman.com`. Dockerfile en `apps/worker`, disco en `/data`, `WWEBJS_DATA_PATH=/data/wwebjs`, Chromium en `/usr/bin/chromium`, health `GET /health`, escucha `PORT`.
+- Worker en Render, workspace `tea-csp9avbgbbvc73ceiu30`, en línea desde el 2026-09-29. URL pública `https://webservice.soygerman.com`. Dockerfile en `apps/worker`, disco en `/data`, `BAILEYS_DATA_PATH=/data/baileys`, health `GET /health`, escucha `PORT`.
 - Local: web `http://localhost:3000`, worker `http://localhost:3001`.
 
 ## Variables
 
 Web: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `WORKER_API_SECRET`, `WORKER_URL`.
 
-Worker: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_API_SECRET`, `WEB_ORIGIN`, `PORT`, `WWEBJS_DATA_PATH`, `PUPPETEER_EXECUTABLE_PATH`.
+Worker: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_API_SECRET`, `WEB_ORIGIN`, `PORT`, `BAILEYS_DATA_PATH`.
 
 El mismo `WORKER_API_SECRET` en ambas. El service role solo en el worker.
 

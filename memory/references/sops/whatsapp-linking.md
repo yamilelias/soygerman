@@ -1,5 +1,7 @@
 # Vincular WhatsApp en producción
 
+Desde el 2026-10-02 el worker habla con WhatsApp por Baileys, sin Chromium. Lo de abajo es el diagnóstico de `whatsapp-web.js` y queda para no repetirlo. Un perfil en `/data/wwebjs` no se convierte: hay que escanear el QR otra vez. La credencial nueva está en `/data/baileys/session-<uuid>`.
+
 Lo aprendido al vincular `yamileliassoto@gmail.com` (`bbed4915-a816-4c74-ac2a-b7efa7e381b0`) el 2026-09-30 y el 2026-10-01. El código ya cambió; esto es para no repetir el diagnóstico.
 
 La librería fijada en el lockfile es whatsapp-web.js 1.34.7 (`package.json` dice `^1.34.2`). `authenticated` y `ready` salen juntos, dentro de `onAppStateHasSyncedEvent`, y ese callback solo lo dispara `WAWebSocketModel.Socket` en `change:hasSynced`. El teléfono puede listar el Chrome y mostrar el historial «en pausa» mientras la fila sigue en `qr_ready`: el escaneo ocurrió y la sincronización no.
