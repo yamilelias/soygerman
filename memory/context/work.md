@@ -17,7 +17,7 @@ Proyecto Supabase `nbwxmkcwzqqxvxxfqqpn`. URL `https://nbwxmkcwzqqxvxxfqqpn.supa
 Tablas:
 
 - `profiles`: se crea con el trigger `handle_new_user` al insertar en `auth.users`.
-- `whatsapp_sessions`: una por usuario. Estados `disconnected`, `connecting`, `qr_ready`, `authenticating`, `connected`. Realtime con `REPLICA IDENTITY FULL`. El dashboard se entera del QR, del escaneo y del resultado por ese canal.
+- `whatsapp_sessions`: una por usuario. Estados `disconnected`, `connecting`, `qr_ready`, `authenticating`, `connected`, `interrupted`. Realtime con `REPLICA IDENTITY FULL`. El dashboard se entera del QR, del escaneo, de una caída y del resultado por ese canal.
 - `chats`: UUID propio, `wa_id` único por usuario. Directos y grupos. No se guarda historial de mensajes. No se borran al sincronizar. Al pasar la sesión a `disconnected`, el worker los borra. Los mensajes ya cerrados quedan con `chat_id` nulo. Los `pending` y `processing` pasan a `failed`.
 - `scheduled_messages`: `pending`, `processing`, `sent`, `cancelled`, `failed`.
 
