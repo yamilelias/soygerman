@@ -25,8 +25,10 @@ export function ChatExplorer({ chats }: { chats: Chat[] }) {
       <div>
         <h1 className="text-2xl font-semibold">Chats y grupos</h1>
         <p className="text-sm text-muted">
-          Conversaciones sincronizadas desde WhatsApp. Aquí no aparece el
-          historial de mensajes.
+          {chats.length.toLocaleString("es-MX")}{" "}
+          {chats.length === 1 ? "conversación" : "conversaciones"}{" "}
+          sincronizadas desde WhatsApp. Aquí no aparece el historial de
+          mensajes.
         </p>
       </div>
 
