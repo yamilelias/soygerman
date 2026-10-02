@@ -58,7 +58,7 @@ export function ChatExplorer({ chats }: { chats: Chat[] }) {
       {visible.length === 0 ? (
         <p className="text-sm text-muted">
           No hay chats para mostrar. Vincula WhatsApp y sincroniza desde
-          Vinculación.
+          Configuración.
         </p>
       ) : (
         <ul className="flex flex-col gap-2">

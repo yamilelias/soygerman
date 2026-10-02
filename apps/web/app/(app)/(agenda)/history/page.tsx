@@ -17,15 +17,5 @@ export default async function HistoryPage() {
     return { ...row, chats: chat ?? null } as ScheduledMessage;
   });
 
-  return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Historial</h1>
-        <p className="text-sm text-muted">
-          Mensajes enviados, fallidos y cancelados.
-        </p>
-      </div>
-      <HistoryTable messages={messages} />
-    </div>
-  );
+  return <HistoryTable messages={messages} />;
 }

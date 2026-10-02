@@ -11,14 +11,7 @@ export default async function SchedulePage() {
     .order("name");
 
   return (
-    <div className="mx-auto flex w-full max-w-xl flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Agendar mensaje</h1>
-        <p className="text-sm text-muted">
-          El envío ocurre en el minuto elegido. Puede tardar hasta un minuto
-          después de esa hora.
-        </p>
-      </div>
+    <div className="w-full max-w-xl">
       <ScheduleForm chats={(data ?? []) as Chat[]} />
     </div>
   );

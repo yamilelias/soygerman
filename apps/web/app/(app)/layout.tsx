@@ -13,5 +13,5 @@ export default async function AuthenticatedLayout({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  return <AppShell email={user.email ?? ""}>{children}</AppShell>;
+  return <AppShell>{children}</AppShell>;
 }

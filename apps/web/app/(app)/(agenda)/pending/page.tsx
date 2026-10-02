@@ -17,16 +17,5 @@ export default async function PendingPage() {
     return { ...row, chats: chat ?? null } as ScheduledMessage;
   });
 
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Pendientes</h1>
-        <p className="text-sm text-muted">
-          Ordenados por la hora de envío más cercana. Cancelar evita que el
-          worker los procese.
-        </p>
-      </div>
-      <PendingList messages={messages} />
-    </div>
-  );
+  return <PendingList messages={messages} />;
 }

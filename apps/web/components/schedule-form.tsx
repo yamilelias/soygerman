@@ -56,7 +56,7 @@ export function ScheduleForm({ chats }: { chats: Chat[] }) {
   if (chats.length === 0) {
     return (
       <p className="text-sm text-muted">
-        Todavía no hay chats. Ve a Vinculación, conecta WhatsApp y sincroniza.
+        Todavía no hay chats. Ve a Configuración, conecta WhatsApp y sincroniza.
       </p>
     );
   }
