@@ -18,7 +18,7 @@ Tablas:
 
 - `profiles`: se crea con el trigger `handle_new_user` al insertar en `auth.users`.
 - `whatsapp_sessions`: una por usuario. Estados `disconnected`, `connecting`, `qr_ready`, `authenticating`, `connected`, `interrupted`. Realtime con `REPLICA IDENTITY FULL`. El dashboard se entera del QR, del escaneo, de una caída y del resultado por ese canal.
-- `chats`: UUID propio, `wa_id` único por usuario. Directos y grupos. No se guarda historial de mensajes. No se borran al sincronizar. Al pasar la sesión a `disconnected`, el worker los borra. Los mensajes ya cerrados quedan con `chat_id` nulo. Los `pending` y `processing` pasan a `failed`.
+- `chats`: UUID propio, `wa_id` único por usuario. Directos y grupos. No se guarda historial de mensajes. No se borran al sincronizar. Al pasar la sesión a `disconnected`, el worker los borra. Los mensajes ya cerrados quedan con `chat_id` nulo. Los `pending` y `processing` pasan a `failed`. PostgREST devuelve como máximo 1000 filas por consulta. La web pide los chats en páginas de ese tamaño, ordenadas por nombre e `id`; si no, Chats y Agendar se cortan a mitad del alfabeto.
 - `scheduled_messages`: `pending`, `processing`, `sent`, `cancelled`, `failed`.
 
 RLS: cada quien lee y escribe lo suyo. En mensajes agendados solo puede insertar `pending` y pasar de `pending` a `cancelled`. No puede falsificar `sent` o `failed`.
