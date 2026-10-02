@@ -48,7 +48,7 @@ El cron es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` 
 
 ## Dónde corre
 
-- Web en Vercel, producción `https://soygerman-rose.vercel.app`. Directorio raíz `apps/web`. El build es `next build --webpack`.
+- Web en Vercel, producción `https://www.soygerman.com` (el apex redirige ahí; `https://soygerman-rose.vercel.app` sigue activo). Directorio raíz `apps/web`. El build es `next build --webpack`.
 - Worker en Render, workspace `tea-csp9avbgbbvc73ceiu30`, en línea desde el 2026-09-29. URL pública `https://webservice.soygerman.com`. Dockerfile en `apps/worker`, disco en `/data`, `WWEBJS_DATA_PATH=/data/wwebjs`, Chromium en `/usr/bin/chromium`, health `GET /health`, escucha `PORT`.
 - Local: web `http://localhost:3000`, worker `http://localhost:3001`.
 
@@ -59,6 +59,8 @@ Web: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `WORKER_API_SE
 Worker: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_API_SECRET`, `WEB_ORIGIN`, `PORT`, `WWEBJS_DATA_PATH`, `PUPPETEER_EXECUTABLE_PATH`.
 
 El mismo `WORKER_API_SECRET` en ambas. El service role solo en el worker.
+
+`WORKER_URL` tiene que ser absoluta y con esquema (`https://webservice.soygerman.com`). La web no llama a Render desde el navegador: `apps/web/app/actions/worker.ts` hace el POST en la función de Vercel. «El worker no está configurado» es una variable ausente. «No se pudo contactar al worker» es un `fetch` que lanzó, sin respuesta HTTP. «Error del worker» es un estado distinto de 2xx. El detalle está en `memory/references/sops/vercel.md`.
 
 ## Correo
 
