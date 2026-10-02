@@ -3,30 +3,71 @@
 import {
   Button,
   Calendar,
+  ComboBox,
   DateField,
   DatePicker,
+  Input,
   Label,
   ListBox,
-  Select,
   TextArea,
   TextField,
   TimeField,
 } from "@heroui/react";
 import { getLocalTimeZone, now, type DateValue } from "@internationalized/date";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { searchChats } from "@/app/actions/chats";
 import { scheduleMessage } from "@/app/actions/messages";
+import { chatLabel } from "@/lib/phone";
 import type { Chat } from "@/lib/types";
 
-export function ScheduleForm({ chats }: { chats: Chat[] }) {
+export function ScheduleForm({ selected }: { selected: Chat | null }) {
   const router = useRouter();
-  const [chatId, setChatId] = useState<string | null>(null);
+  const [chatId, setChatId] = useState<string | null>(selected?.id ?? null);
+  const [input, setInput] = useState(selected ? chatLabel(selected) : "");
+  const [options, setOptions] = useState<Chat[]>(selected ? [selected] : []);
+  const [searching, setSearching] = useState(false);
   const [messageBody, setMessageBody] = useState("");
   const [scheduledAt, setScheduledAt] = useState<DateValue | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
+  const pickedLabel = useRef(selected ? chatLabel(selected) : "");
+  const requestId = useRef(0);
   const minimum = now(getLocalTimeZone());
+
+  function onInputChange(value: string) {
+    setInput(value);
+    if (value === pickedLabel.current) return;
+    setChatId(null);
+    const text = value.trim();
+    const current = ++requestId.current;
+    if (text.length < 2) {
+      setOptions([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    window.setTimeout(() => {
+      if (current !== requestId.current) return;
+      void searchChats(text).then((chats) => {
+        if (current !== requestId.current) return;
+        setOptions(chats);
+        setSearching(false);
+      });
+    }, 250);
+  }
+
+  function onSelectionChange(key: string | number | null) {
+    const id = key == null ? null : String(key);
+    setChatId(id);
+    const chat =
+      options.find((item) => item.id === id) ??
+      (selected?.id === id ? selected : null);
+    const label = chat ? chatLabel(chat) : "";
+    pickedLabel.current = label;
+    setInput(label);
+  }
 
   function submit() {
     setError(null);
@@ -53,13 +94,12 @@ export function ScheduleForm({ chats }: { chats: Chat[] }) {
     });
   }
 
-  if (chats.length === 0) {
-    return (
-      <p className="text-sm text-muted">
-        Todavía no hay chats. Ve a Configuración, conecta WhatsApp y sincroniza.
-      </p>
-    );
-  }
+  const hint =
+    input.trim().length < 2
+      ? "Escribe un nombre o número."
+      : searching
+        ? "Buscando..."
+        : "Ningún chat coincide.";
 
   return (
     <form
@@ -69,30 +109,36 @@ export function ScheduleForm({ chats }: { chats: Chat[] }) {
         submit();
       }}
     >
-      <Select
+      <ComboBox
+        fullWidth
+        menuTrigger="focus"
+        items={options}
         selectedKey={chatId}
-        onSelectionChange={(key) => setChatId(key ? String(key) : null)}
-        placeholder="Elige un chat o grupo"
+        inputValue={input}
+        onInputChange={onInputChange}
+        onSelectionChange={onSelectionChange}
+        allowsEmptyCollection
+        defaultFilter={() => true}
       >
         <Label>Destino</Label>
-        <Select.Trigger>
-          <Select.Value />
-          <Select.Indicator />
-        </Select.Trigger>
-        <Select.Popover>
-          <ListBox>
-            {chats.map((chat) => (
-              <ListBox.Item
-                key={chat.id}
-                id={chat.id}
-                textValue={`${chat.name} ${chat.is_group ? "Grupo" : "Directo"}`}
-              >
-                {chat.name} · {chat.is_group ? "Grupo" : "Directo"}
+        <ComboBox.InputGroup>
+          <Input placeholder="Nombre o número" />
+          <ComboBox.Trigger />
+        </ComboBox.InputGroup>
+        <ComboBox.Popover>
+          <ListBox
+            renderEmptyState={() => (
+              <p className="px-3 py-2 text-sm text-muted">{hint}</p>
+            )}
+          >
+            {(chat: Chat) => (
+              <ListBox.Item id={chat.id} textValue={chatLabel(chat)}>
+                {chatLabel(chat)}
               </ListBox.Item>
-            ))}
+            )}
           </ListBox>
-        </Select.Popover>
-      </Select>
+        </ComboBox.Popover>
+      </ComboBox>
 
       <TextField value={messageBody} onChange={setMessageBody}>
         <Label>Mensaje</Label>
