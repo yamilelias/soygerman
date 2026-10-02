@@ -1,6 +1,5 @@
 require("dotenv").config();
 
-const fs = require("fs");
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
@@ -86,10 +85,9 @@ app.use((error, _req, res, _next) => {
 });
 
 app.listen(port, () => {
-  const chrome = process.env.PUPPETEER_EXECUTABLE_PATH || "";
   log(
     "arranque",
-    `puerto ${port} origen ${process.env.WEB_ORIGIN || "http://localhost:3000"} chrome ${chrome || "el de puppeteer"} ${chrome ? (fs.existsSync(chrome) ? "encontrado" : "no existe") : ""} ${describeMemory()}`.trim(),
+    `puerto ${port} origen ${process.env.WEB_ORIGIN || "http://localhost:3000"} ${describeMemory()}`,
   );
   startCron(supabase, sessions);
   sessions.restoreSessions().catch((error) => {

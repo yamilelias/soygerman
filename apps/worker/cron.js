@@ -1,4 +1,5 @@
 const cron = require("node-cron");
+const { toBaileysJid } = require("./session-manager");
 
 function truncate(message) {
   const text = message || "Error desconocido";
@@ -26,8 +27,10 @@ function startCron(supabase, sessions) {
               : "WhatsApp no está conectado para este usuario",
           );
         }
-        const client = sessions.getClient(message.user_id);
-        await client.sendMessage(message.wa_id, message.message_body);
+        const sock = sessions.getClient(message.user_id);
+        await sock.sendMessage(toBaileysJid(message.wa_id), {
+          text: message.message_body,
+        });
         const { error: updateError } = await supabase
           .from("scheduled_messages")
           .update({ status: "sent", error_message: null })

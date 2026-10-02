@@ -1,6 +1,6 @@
 # SoyGerman
 
-Mensajes programados de WhatsApp: una PWA en Next.js y un worker con `whatsapp-web.js`.
+Mensajes programados de WhatsApp: una PWA en Next.js y un worker con Baileys.
 
 ## Estructura
 
@@ -30,7 +30,7 @@ La web queda en `http://localhost:3000` y el worker en el puerto `3001`.
 
 ## Web en Vercel
 
-El proyecto es [weprograpp/soygerman](https://vercel.com/weprograpp/soygerman). El directorio raíz es `apps/web` y el build ejecuta `npm run build`. La instalación solo trae el workspace `web`, para no bajar Chromium del worker.
+El proyecto es [weprograpp/soygerman](https://vercel.com/weprograpp/soygerman). El directorio raíz es `apps/web` y el build ejecuta `npm run build`. La instalación solo trae el workspace `web`.
 
 Variables en Production y Preview:
 
@@ -56,9 +56,9 @@ Sin ese SMTP, Supabase solo manda el enlace a los miembros del equipo y con un l
 ## Worker en Render
 
 - Web Service con Dockerfile `apps/worker/Dockerfile` y contexto `apps/worker`.
-- Disco persistente montado en `/data`. `WWEBJS_DATA_PATH=/data/wwebjs`.
-- Variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_API_SECRET`, `WEB_ORIGIN`, `PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium`.
+- Disco persistente montado en `/data`. Las credenciales quedan en `/data/baileys` (`BAILEYS_DATA_PATH`).
+- Variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_API_SECRET`, `WEB_ORIGIN`.
 - Health check: `GET /health`.
-- El proceso escucha `PORT`. Cada sesión activa abre un Chromium; calcula cerca de 1 GB de RAM por usuario conectado.
+- El proceso escucha `PORT`. La sesión es un WebSocket, sin navegador. Un perfil de Chromium viejo en `/data/wwebjs` no se restaura: hay que volver a escanear el QR.
 
 El cron corre cada minuto. Un mensaje sale en el minuto programado, con hasta ~60 segundos de retraso. `claim_due_messages()` evita un envío doble si el ciclo se solapa. Un mensaje `cancelled` no entra en esa consulta.
