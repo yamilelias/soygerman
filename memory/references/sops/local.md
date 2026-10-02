@@ -8,3 +8,15 @@
 `npm run build:web` usa Webpack. En `next dev` la PWA queda apagada.
 
 El 2026-09-28 el servidor local del puerto 3000 y el worker de prueba se detuvieron a mano. Producción no depende de esos procesos.
+
+## Qué apunta a dónde
+
+`apps/web/.env.local` usa `WORKER_URL=http://localhost:3001`. El sitio de producción habla con el worker de Render. Un QR probado en `https://www.soygerman.com` no pasa por el proceso local.
+
+Sin `apps/worker/.env` el worker sale al arrancar. Ahí van el service role de Supabase, el mismo `WORKER_API_SECRET` que la web, y `PUPPETEER_EXECUTABLE_PATH`. Puppeteer no descarga Chromium: lo dice `apps/worker/.npmrc`. La ruta de Chrome en esta máquina está en `memory/local.md`.
+
+## Recargar el worker
+
+`node --watch` no siempre vuelve a cargar `session-manager.js` mientras Chromium sigue abierto. El proceso viejo responde `GET /health` y el código nuevo no corre. Un SIGTERM no lo suelta. Hay que matar el `node index.js` hijo con `kill -9`. El `--watch` padre levanta otro y restaura el perfil.
+
+El 2026-09-29 el proceso de las 16:42 siguió sirviendo `POST /sync-chats` después de guardar el arreglo a las 17:00. El 500 era el código anterior.
