@@ -38,6 +38,7 @@ export default async function DashboardPage() {
       .from("chats")
       .select(unreadColumns, { count: "exact" })
       .eq("hidden", false)
+      .eq("archived", false)
       .or("unread_count.gt.0,marked_unread.eq.true")
       .order("unread_since", { ascending: true, nullsFirst: false })
       .order("last_message_at", { ascending: false, nullsFirst: false })

@@ -184,4 +184,41 @@ test("el guardado no pisa columnas que este chat no trajo", () => {
   assert.equal(detailed[0].unread_since, "2023-11-14T22:13:20.000Z");
   assert.equal("unread_count" in plain[0], false);
   assert.equal("last_message_preview" in plain[0], false);
+  assert.equal("archived" in detailed[0], false);
+});
+
+test("un chat archivado se guarda como archivado y un aviso posterior no lo desarma", () => {
+  const archived = absorbChat(
+    null,
+    {
+      id: "521@s.whatsapp.net",
+      name: "Ana",
+      unreadCount: 2,
+      archived: true,
+    },
+    false,
+  );
+  assert.equal(archived.state.archived, true);
+  const later = absorbChat(
+    archived.state,
+    { id: "521@s.whatsapp.net", unreadCount: 3 },
+    false,
+  );
+  assert.equal(later.state.archived, true);
+  const rows = groupChatRows("user", [later.state], "2026-10-04T00:00:00.000Z");
+  assert.equal(rows[0][0].archived, true);
+  assert.equal(rows[0][0].unread_count, 3);
+
+  const opened = absorbChat(
+    later.state,
+    { id: "521@s.whatsapp.net", archived: false },
+    false,
+  );
+  assert.equal(opened.state.archived, false);
+  const unarchived = groupChatRows(
+    "user",
+    [opened.state],
+    "2026-10-04T00:00:00.000Z",
+  );
+  assert.equal(unarchived[0][0].archived, false);
 });

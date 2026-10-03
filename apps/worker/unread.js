@@ -23,6 +23,8 @@ function blankChat(id, isGroup) {
     unreadCount: 0,
     markedUnread: false,
     unreadKnown: false,
+    archived: false,
+    archivedKnown: false,
     unreadSince: null,
     lastMessageAt: null,
     lastMessagePreview: null,
@@ -39,6 +41,8 @@ function snapshot(state) {
     state.unreadCount,
     state.markedUnread,
     state.unreadKnown,
+    state.archived,
+    state.archivedKnown,
     state.unreadSince,
     state.lastMessageAt,
     state.lastMessagePreview,
@@ -87,6 +91,10 @@ function absorbChat(previous, chat, isGroup) {
       state.unreadCount = Number.isFinite(count) ? Math.max(0, count) : 0;
     }
     if (hasMarked) state.markedUnread = Boolean(chat.markedAsUnread);
+  }
+  if (chat.archived != null) {
+    state.archivedKnown = true;
+    state.archived = Boolean(chat.archived);
   }
 
   reconcileUnread(state);
@@ -213,6 +221,7 @@ function groupChatRows(userId, chats, now) {
       row.unread_since =
         count > 0 && chat.unreadSince ? isoFromSeconds(chat.unreadSince) : null;
     }
+    if (chat.archivedKnown) row.archived = Boolean(chat.archived);
     if (chat.lastMessageAt) {
       row.last_message_at = isoFromSeconds(chat.lastMessageAt);
       row.last_message_preview = chat.lastMessagePreview;
