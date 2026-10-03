@@ -69,3 +69,5 @@ Formato: [AAAA-MM-DD] DECISIÓN: ... | RAZONAMIENTO: ... | CONTEXTO: ...
 [2026-10-02] DECISIÓN: Agendar abre con el día siguiente, a la hora en que se abrió la vista. | RAZONAMIENTO: La fecha vacía obligaba a rellenar el campo más repetido. Mañana a esta hora es el valor que casi siempre se quiere. | CONTEXTO: El control sigue exigiendo una hora futura.
 
 [2026-10-02] DECISIÓN: Quitar un chat pone `chats.hidden` y cancela sus pendientes. El sync no escribe `hidden`. | RAZONAMIENTO: Borrar la fila no sirve: el siguiente upsert la crea otra vez. La lista tiene que quedarse solo con los chats que la persona quiere para recordatorios. | CONTEXTO: Al desconectar, el worker sigue borrando todas las filas, ocultas incluidas.
+
+[2026-10-02] DECISIÓN: El magic link no crea cuentas. El alta es una invitación desde Supabase. | RAZONAMIENTO: La página de login no debe registrar a quien llegue con un correo. Quien ya existe sigue pidiendo el enlace. | CONTEXTO: `shouldCreateUser: false`. El interruptor «Allow new users to sign up» del panel cierra el mismo hueco si alguien llama la API directo.

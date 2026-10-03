@@ -4,6 +4,18 @@ import { Button, Card, Input, Label, TextField } from "@heroui/react";
 import { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 
+function accessMessage(message: string) {
+  const text = message.toLowerCase();
+  if (
+    text.includes("signups not allowed") ||
+    text.includes("user not found") ||
+    text.includes("otp_disabled")
+  ) {
+    return "Este correo no tiene acceso. Solo entra quien recibió una invitación.";
+  }
+  return message;
+}
+
 export function LoginForm({ authError }: { authError: boolean }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -17,11 +29,14 @@ export function LoginForm({ authError }: { authError: boolean }) {
     const origin = window.location.origin;
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: `${origin}/auth/callback` },
+      options: {
+        emailRedirectTo: `${origin}/auth/callback`,
+        shouldCreateUser: false,
+      },
     });
     setPending(false);
     if (signInError) {
-      setError(signInError.message);
+      setError(accessMessage(signInError.message));
       return;
     }
     setSent(true);
@@ -46,7 +61,8 @@ export function LoginForm({ authError }: { authError: boolean }) {
       <Card.Header>
         <Card.Title>Entrar</Card.Title>
         <Card.Description>
-          Usa tu correo. Te enviaremos un enlace, sin contraseña.
+          Escribe el correo con el que te invitaron. Te enviaremos un enlace,
+          sin contraseña.
         </Card.Description>
       </Card.Header>
       <Card.Content>

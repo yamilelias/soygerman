@@ -28,7 +28,7 @@ RLS: cada quien lee y escribe lo suyo. En mensajes agendados solo puede insertar
 
 ## Auth
 
-Magic link con PKCE. El formulario llama `signInWithOtp` y el redirect es `{origen}/auth/callback`. Esa ruta cambia el `code` por sesión.
+Magic link con PKCE. El formulario llama `signInWithOtp` con `shouldCreateUser: false` y el redirect es `{origen}/auth/callback`. Esa ruta cambia el `code` por sesión. Un correo nuevo no crea cuenta: el alta es la invitación desde el panel de Supabase.
 
 Rutas protegidas: `/dashboard`, `/chats`, `/schedule`, `/pending`, `/history`, `/settings`. Sin sesión vuelven a `/login`. El menú de escritorio es Inicio, Chats, Agendar y Configuración. En el teléfono el pie es Chats, Agendar y Configuración; el logo abre el inicio. Agendar, Pendientes e Historial comparten la vista de mensajes y cada una conserva su URL. Al abrir Agendar, la fecha queda en el día siguiente a la hora en que se abrió la vista. Configuración tiene la cuenta en solo lectura, el tema y la vinculación de WhatsApp. El inicio resume los pendientes, los enviados de la semana (lunes a domingo, hora de Ciudad de México) y los fallidos acumulados.
 
