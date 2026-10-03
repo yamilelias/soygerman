@@ -1,12 +1,12 @@
+import { CHAT_PAGE_SIZE, type ChatKind } from "@/lib/chat-list";
 import type { Chat } from "@/lib/types";
 import { createClient } from "@/utils/supabase/server";
 
-export const CHAT_PAGE_SIZE = 40;
+export { CHAT_PAGE_SIZE, type ChatKind };
+
 const SEARCH_LIMIT = 20;
 
 const COLUMNS = "id, user_id, wa_id, name, is_group, updated_at";
-
-export type ChatKind = "all" | "groups" | "direct";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

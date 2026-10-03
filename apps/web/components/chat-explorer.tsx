@@ -4,7 +4,7 @@ import { Chip, Input, Label, Tabs, TextField } from "@heroui/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { CHAT_PAGE_SIZE, type ChatKind } from "@/lib/chats";
+import { CHAT_PAGE_SIZE, type ChatKind } from "@/lib/chat-list";
 import { formatPhone } from "@/lib/phone";
 import type { Chat } from "@/lib/types";
 
