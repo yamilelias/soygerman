@@ -14,12 +14,16 @@ import {
   TimeField,
 } from "@heroui/react";
 import { getLocalTimeZone, now, type DateValue } from "@internationalized/date";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { searchChats } from "@/app/actions/chats";
 import { scheduleMessage } from "@/app/actions/messages";
 import { chatLabel } from "@/lib/phone";
 import type { Chat } from "@/lib/types";
+
+function defaultWhen() {
+  return now(getLocalTimeZone()).add({ days: 1 });
+}
 
 export function ScheduleForm({ selected }: { selected: Chat | null }) {
   const router = useRouter();
@@ -35,6 +39,10 @@ export function ScheduleForm({ selected }: { selected: Chat | null }) {
   const pickedLabel = useRef(selected ? chatLabel(selected) : "");
   const requestId = useRef(0);
   const minimum = now(getLocalTimeZone());
+
+  useEffect(() => {
+    setScheduledAt((current) => current ?? defaultWhen());
+  }, []);
 
   function onInputChange(value: string) {
     setInput(value);
@@ -89,7 +97,7 @@ export function ScheduleForm({ selected }: { selected: Chat | null }) {
       }
       setDone(true);
       setMessageBody("");
-      setScheduledAt(null);
+      setScheduledAt(defaultWhen());
       router.refresh();
     });
   }
