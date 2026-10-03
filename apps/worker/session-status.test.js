@@ -3,8 +3,10 @@ const test = require("node:test");
 const {
   linkStatusForEntry,
   outcomeForConnection,
+  shouldDiscardSession,
   shouldSyncHistory,
   toBaileysJid,
+  CLOSE_CONNECTION_LOST,
   CLOSE_LOGGED_OUT,
   CLOSE_RESTART_REQUIRED,
   CLOSE_BAD_SESSION,
@@ -51,12 +53,61 @@ test("la sesión abierta queda conectada", () => {
   assert.equal(outcome.dbStatus, "connected");
 });
 
-test("un cierre que no es logout pide reintento", () => {
+test("un 428 con la sesión abierta reconecta sin nuevo QR", () => {
   const outcome = outcomeForConnection({
     connection: "close",
+    status: "ready",
     statusCode: 428,
+    registered: true,
+  });
+  assert.equal(outcome.action, "reconnect");
+});
+
+test("un 408 con la sesión abierta también reconecta", () => {
+  const outcome = outcomeForConnection({
+    connection: "close",
+    status: "ready",
+    statusCode: CLOSE_CONNECTION_LOST,
+    registered: true,
+  });
+  assert.equal(outcome.action, "reconnect");
+});
+
+test("un corte durante el QR sigue gastando un intento de vinculación", () => {
+  const outcome = outcomeForConnection({
+    connection: "close",
+    status: "qr",
+    statusCode: CLOSE_CONNECTION_LOST,
+    registered: false,
   });
   assert.equal(outcome.action, "retry");
+});
+
+test("una credencial registrada no se borra al reintentar", () => {
+  assert.equal(
+    shouldDiscardSession({
+      fresh: false,
+      consumeAttempt: true,
+      registered: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldDiscardSession({
+      fresh: true,
+      consumeAttempt: true,
+      registered: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldDiscardSession({
+      fresh: false,
+      consumeAttempt: true,
+      registered: false,
+    }),
+    true,
+  );
 });
 
 test("el reinicio tras el emparejamiento reconecta sin borrar credenciales", () => {

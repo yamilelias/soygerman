@@ -3,6 +3,7 @@ const path = require("path");
 const pino = require("pino");
 const qrcode = require("qrcode");
 const { log } = require("./log");
+const { credsAreRegistered, persistCreds, readStoredCreds, deleteCreds } = require("./auth-store");
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -15,9 +16,12 @@ const STALE_QR_MS = 300000;
 const STALE_AUTHENTICATING_MS = 180000;
 const WATCH_MS = 8000;
 const HISTORY_SYNC_FULL = 2;
+const CLOSE_CONNECTION_LOST = 408;
+const CLOSE_CONNECTION_CLOSED = 428;
 const CLOSE_LOGGED_OUT = 401;
 const CLOSE_RESTART_REQUIRED = 515;
 const CLOSE_BAD_SESSION = 500;
+const RECONNECT_PAUSE_MS = 15000;
 
 const logger = pino({ level: "error" });
 
@@ -93,12 +97,23 @@ function linkStatusForEntry(entry) {
   return "connecting";
 }
 
+function reconnectDelayMs(restarts) {
+  const steps = [500, 1000, 2000, 5000, 10000, RECONNECT_PAUSE_MS];
+  return steps[Math.min(restarts, steps.length - 1)];
+}
+
+function shouldDiscardSession({ fresh, consumeAttempt, registered }) {
+  if (registered) return false;
+  return Boolean(fresh || consumeAttempt);
+}
+
 function outcomeForConnection({
   status,
   connection,
   qr,
   isNewLogin,
   statusCode,
+  registered,
 } = {}) {
   if (qr) {
     return { action: "qr", memoryStatus: "qr", dbStatus: "qr_ready" };
@@ -129,8 +144,18 @@ function outcomeForConnection({
   }
   if (connection === "close") {
     if (statusCode === CLOSE_LOGGED_OUT) return { action: "logout" };
-    if (statusCode === CLOSE_RESTART_REQUIRED) return { action: "reconnect" };
-    if (statusCode === CLOSE_BAD_SESSION) return { action: "retry-fresh" };
+    if (statusCode === CLOSE_BAD_SESSION && !registered) {
+      return { action: "retry-fresh" };
+    }
+    if (
+      statusCode === CLOSE_RESTART_REQUIRED ||
+      registered ||
+      status === "ready" ||
+      (statusCode === CLOSE_CONNECTION_CLOSED && status !== "qr") ||
+      (statusCode === CLOSE_CONNECTION_LOST && status !== "qr")
+    ) {
+      return { action: "reconnect" };
+    }
     return { action: "retry" };
   }
   return { action: "ignore" };
@@ -254,24 +279,43 @@ class SessionManager {
     }
     if (existing) {
       const failedEarly = existing.status !== "ready";
+      const keepCreds = existing.registered || sessionIsRegistered(userId);
       existing.closing = true;
       existing.generation += 1;
       this.stopMemory(existing);
       this.clients.delete(userId);
       await this.safeEnd(existing.sock);
-      if (failedEarly) discardSession(userId);
+      if (failedEarly && !keepCreds) discardSession(userId);
     }
 
-    log("connect", `${userId} iniciando intento 1 ${describeMemory()}`);
-    await this.upsertSession(userId, {
-      status: "connecting",
-      qr_code_base64: null,
-    });
+    const registered = await this.prepareAuth(userId);
+    log(
+      "connect",
+      `${userId} iniciando intento 1 registrada=${registered} ${describeMemory()}`,
+    );
+    if (!registered) {
+      await this.upsertSession(userId, {
+        status: "connecting",
+        qr_code_base64: null,
+      });
+    }
     await this.launch(userId, 1, 1, 0);
-    return { status: "connecting" };
+    return { status: registered ? "connected" : "connecting" };
+  }
+
+  async prepareAuth(userId) {
+    if (sessionIsRegistered(userId)) return true;
+    const body = await readStoredCreds(this.supabase, userId);
+    if (!body) return false;
+    discardSession(userId);
+    fs.mkdirSync(sessionDir(userId), { recursive: true });
+    fs.writeFileSync(credsPath(userId), body);
+    log("perfil", `${userId} credencial restaurada`);
+    return true;
   }
 
   async launch(userId, attempt, generation, restarts) {
+    await this.prepareAuth(userId);
     const { default: makeWASocket, useMultiFileAuthState } = await loadBaileys();
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir(userId));
     log(
@@ -301,6 +345,7 @@ class SessionManager {
       startedAt: Date.now(),
       closing: false,
       retrying: false,
+      registered: credsAreRegistered(state.creds),
     };
     this.clients.set(userId, entry);
 
@@ -318,7 +363,13 @@ class SessionManager {
     entry.flushCreds = () => credsWrite;
     sock.ev.on("creds.update", () => {
       credsWrite = credsWrite
-        .then(() => saveCreds())
+        .then(async () => {
+          await saveCreds();
+          if (sessionIsRegistered(userId)) {
+            entry.registered = true;
+            await persistCreds(this.supabase, userId, credsPath(userId));
+          }
+        })
         .catch((error) => {
           log(
             "perfil",
@@ -377,12 +428,21 @@ class SessionManager {
       qr: update.qr,
       isNewLogin: update.isNewLogin,
       statusCode: closeStatusCode(update),
+      registered: entry.registered || sessionIsRegistered(userId),
     });
 
     if (outcome.action === "ignore" || outcome.action === "connecting") return;
 
     if (outcome.action === "qr") {
-      if (entry.status === "authenticating" || entry.status === "ready") return;
+      if (entry.registered || entry.status === "ready") {
+        log("qr", `${userId} inesperado con sesión registrada; se reabre`);
+        await this.relaunch(userId, sock, generation, {
+          fresh: false,
+          consumeAttempt: false,
+        });
+        return;
+      }
+      if (entry.status === "authenticating") return;
       entry.status = "qr";
       entry.startedAt = Date.now();
       log("qr", `${userId} recibido largo=${update.qr.length}`);
@@ -420,11 +480,15 @@ class SessionManager {
     if (outcome.action === "ready") {
       this.stopMemory(entry);
       entry.status = "ready";
+      entry.registered = true;
       entry.retrying = false;
+      entry.restarts = 0;
       await this.upsertSession(userId, {
         status: "connected",
         qr_code_base64: null,
       });
+      if (entry.flushCreds) await entry.flushCreds();
+      await persistCreds(this.supabase, userId, credsPath(userId));
       log("ready", `${userId} ${describeMemory()}`);
       return;
     }
@@ -435,6 +499,7 @@ class SessionManager {
       this.clients.delete(userId);
       log("disconnected", `${userId} logout`);
       discardSession(userId);
+      await deleteCreds(this.supabase, userId);
       await this.markDisconnected(userId);
       return;
     }
@@ -475,25 +540,35 @@ class SessionManager {
     if (entry.flushCreds) await entry.flushCreds();
     await this.safeEnd(sock);
 
-    const registered = sessionIsRegistered(userId);
-    if (fresh || (consumeAttempt && !registered)) discardSession(userId);
+    const registered = entry.registered || sessionIsRegistered(userId);
+    if (shouldDiscardSession({ fresh, consumeAttempt, registered })) {
+      discardSession(userId);
+    }
 
-    if (giveUp) {
+    if (giveUp && registered) {
+      log(
+        "reintento",
+        `${userId} espera ${RECONNECT_PAUSE_MS}ms para reabrir la sesión`,
+      );
+      entry.restarts = 0;
+      await new Promise((resolve) => setTimeout(resolve, RECONNECT_PAUSE_MS));
+    } else if (giveUp) {
       this.clients.delete(userId);
       if (wasReady && !fresh) await this.markClosed(userId, "interrupted");
-      else await this.markDisconnected(userId);
+      else await this.markClosed(userId, "disconnected");
       log("reintento", `${userId} agotado tras ${attempt} intentos`);
       return;
     }
 
-    if (!wasReady) {
+    if (!wasReady && !registered) {
       await this.upsertSession(userId, {
         status: "connecting",
         qr_code_base64: null,
       });
     }
-    if (consumeAttempt) {
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+    const waitMs = consumeAttempt ? RETRY_DELAY_MS : reconnectDelayMs(nextRestarts);
+    if (waitMs && !(giveUp && registered)) {
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
 
     const current = this.clients.get(userId);
@@ -507,16 +582,17 @@ class SessionManager {
     }
 
     const nextAttempt = consumeAttempt ? attempt + 1 : attempt;
+    const launchRestarts = giveUp && registered ? 0 : nextRestarts;
     try {
-      await this.launch(userId, nextAttempt, generation + 1, nextRestarts);
+      await this.launch(userId, nextAttempt, generation + 1, launchRestarts);
     } catch (error) {
       log("launch", `${userId} falló: ${error.message || error}`);
       const launched = this.clients.get(userId);
       if (launched && launched.sock !== sock) return;
       this.clients.delete(userId);
-      if (!sessionIsRegistered(userId)) discardSession(userId);
-      if (wasReady) await this.markClosed(userId, "interrupted");
-      else await this.markDisconnected(userId);
+      if (!sessionIsRegistered(userId) && !registered) discardSession(userId);
+      if (registered || wasReady) await this.markClosed(userId, "interrupted");
+      else await this.markClosed(userId, "disconnected");
     }
   }
 
@@ -535,27 +611,25 @@ class SessionManager {
       }
     }
     discardSession(userId);
+    await deleteCreds(this.supabase, userId);
     await this.markDisconnected(userId);
   }
 
   async markDisconnected(userId) {
-    await this.markClosed(userId, "disconnected");
+    await this.markClosed(userId, "disconnected", { clear: true });
   }
 
-  async markClosed(userId, status) {
+  async markClosed(userId, status, { clear = false } = {}) {
     await this.upsertSession(userId, {
       status,
       qr_code_base64: null,
     });
-    await this.clearChats(
-      userId,
-      status === "interrupted"
-        ? "La conexión de WhatsApp se interrumpió"
-        : "WhatsApp se desconectó",
-    );
+    if (!clear) return;
+    await this.clearChats(userId, "WhatsApp se desconectó");
   }
 
   async publishLinkStatus(userId, entry) {
+    if (entry?.registered) return;
     const status = linkStatusForEntry(entry);
     if (status === "connected" || status === "interrupted") return;
     await this.upsertSession(userId, { status });
@@ -576,6 +650,12 @@ class SessionManager {
       void this.safeEnd(entry.sock);
     }
     if (this.clients.has(userId)) return false;
+
+    if (await this.prepareAuth(userId)) {
+      log("sesión", `${userId} se reabre con la credencial guardada`);
+      await this.connect(userId);
+      return false;
+    }
 
     const { data, error } = await this.supabase
       .from("whatsapp_sessions")
@@ -697,7 +777,7 @@ class SessionManager {
           }
           const userId = item.name.slice("session-".length);
           if (!UUID_PATTERN.test(userId)) continue;
-          if (!sessionIsRegistered(userId)) {
+          if (!(await this.prepareAuth(userId))) {
             log(
               "restore",
               `${userId} sin sesión lista; se borra el perfil a medias ${describeMemory()}`,
@@ -720,8 +800,8 @@ class SessionManager {
   async reconcileStaleSessions() {
     const { data, error } = await this.supabase
       .from("whatsapp_sessions")
-      .select("user_id")
-      .eq("status", "connected");
+      .select("user_id, status")
+      .in("status", ["connected", "interrupted"]);
     if (error) {
       log("restore", `no se revisaron sesiones: ${error.message}`);
       return;
@@ -738,8 +818,11 @@ module.exports = {
   describeMemory,
   linkStatusForEntry,
   outcomeForConnection,
+  shouldDiscardSession,
   shouldSyncHistory,
   toBaileysJid,
+  CLOSE_CONNECTION_LOST,
+  CLOSE_CONNECTION_CLOSED,
   CLOSE_LOGGED_OUT,
   CLOSE_RESTART_REQUIRED,
   CLOSE_BAD_SESSION,

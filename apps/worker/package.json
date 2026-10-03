@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
-    "test": "node --test session-status.test.js"
+    "test": "node --test session-status.test.js auth-store.test.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
