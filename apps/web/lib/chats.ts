@@ -54,8 +54,11 @@ export async function searchChats({
   const from = (safePage - 1) * size;
   const match = matchFilter(query);
 
-  let listed = supabase.from("chats").select(COLUMNS);
-  let counted = supabase.from("chats").select("id", { count: "exact", head: true });
+  let listed = supabase.from("chats").select(COLUMNS).eq("hidden", false);
+  let counted = supabase
+    .from("chats")
+    .select("id", { count: "exact", head: true })
+    .eq("hidden", false);
   if (kind === "groups") {
     listed = listed.eq("is_group", true);
     counted = counted.eq("is_group", true);
@@ -97,6 +100,7 @@ export async function getChat(id: string): Promise<Chat | null> {
     .from("chats")
     .select(COLUMNS)
     .eq("id", id)
+    .eq("hidden", false)
     .maybeSingle();
   if (error) throw new Error(error.message);
   return (data as Chat | null) ?? null;

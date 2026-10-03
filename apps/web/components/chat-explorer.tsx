@@ -1,9 +1,11 @@
 "use client";
 
-import { Chip, Input, Label, Tabs, TextField } from "@heroui/react";
+import { Button, Chip, Input, Label, Tabs, TextField } from "@heroui/react";
+import { Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { deleteChat } from "@/app/actions/chats";
 import { CHAT_PAGE_SIZE, type ChatKind } from "@/lib/chat-list";
 import { formatPhone } from "@/lib/phone";
 import type { Chat } from "@/lib/types";
@@ -33,6 +35,8 @@ export function ChatExplorer({
 }) {
   const router = useRouter();
   const [text, setText] = useState(query);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
   const pageCount = Math.max(1, Math.ceil(total / CHAT_PAGE_SIZE));
   const from = total === 0 ? 0 : (page - 1) * CHAT_PAGE_SIZE + 1;
   const to = Math.min(page * CHAT_PAGE_SIZE, total);
@@ -48,6 +52,23 @@ export function ChatExplorer({
     }, 300);
     return () => clearTimeout(handle);
   }, [text, query, kind, router]);
+
+  function remove(chat: Chat) {
+    const label = chat.name || "este chat";
+    const confirmed = window.confirm(
+      `¿Quitar ${label} de la lista? Los recordatorios pendientes de este chat se cancelan.`,
+    );
+    if (!confirmed) return;
+    setError(null);
+    startTransition(async () => {
+      const result = await deleteChat(chat.id);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
@@ -93,7 +114,7 @@ export function ChatExplorer({
       {chats.length === 0 ? (
         <p className="text-sm text-muted">
           {total === 0 && !query.trim() && kind === "all"
-            ? "No hay chats para mostrar. Vincula WhatsApp y sincroniza desde Configuración."
+            ? "No hay chats para mostrar. Los que quitas no vuelven al sincronizar."
             : "Ningún chat coincide."}
         </p>
       ) : (
@@ -127,12 +148,24 @@ export function ChatExplorer({
                   >
                     Agendar
                   </Link>
+                  <Button
+                    variant="danger-soft"
+                    size="sm"
+                    aria-label={`Quitar ${chat.name}`}
+                    isDisabled={pending}
+                    onPress={() => remove(chat)}
+                  >
+                    <Trash2 size={16} />
+                    Quitar
+                  </Button>
                 </div>
               </li>
             );
           })}
         </ul>
       )}
+
+      {error ? <p className="text-sm text-danger">{error}</p> : null}
 
       {pageCount > 1 ? (
         <div className="flex items-center justify-between gap-3 text-sm">

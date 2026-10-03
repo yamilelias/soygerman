@@ -750,6 +750,7 @@ class SessionManager {
       is_group: chat.isGroup,
       updated_at: now,
     }));
+    // No incluir `hidden`: el upsert no debe devolver un chat que la persona quitó.
 
     for (let index = 0; index < rows.length; index += 200) {
       const chunk = rows.slice(index, index + 200);
