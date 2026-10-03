@@ -1,8 +1,13 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
-import type { ScheduledMessage } from "@/lib/types";
+import type { Chat, ScheduledMessage } from "@/lib/types";
 import { currentWeekInMexico, formatWeekRange } from "@/lib/week";
 import { createClient } from "@/utils/supabase/server";
+
+const unreadColumns =
+  "id, user_id, wa_id, name, is_group, updated_at, unread_count, marked_unread, unread_since, last_message_at, last_message_preview, last_message_from_me";
+
+const UNREAD_LIMIT = 40;
 
 const messageColumns =
   "id, user_id, chat_id, message_body, scheduled_at, status, error_message, created_at, chats(name, is_group)";
@@ -11,7 +16,8 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const week = currentWeekInMexico();
 
-  const [pendingResult, sentResult, failedResult] = await Promise.all([
+  const [pendingResult, sentResult, failedResult, unreadResult] =
+    await Promise.all([
     supabase
       .from("scheduled_messages")
       .select(messageColumns, { count: "exact" })
@@ -28,22 +34,98 @@ export default async function DashboardPage() {
       .from("scheduled_messages")
       .select("id", { count: "exact", head: true })
       .eq("status", "failed"),
+    supabase
+      .from("chats")
+      .select(unreadColumns, { count: "exact" })
+      .eq("hidden", false)
+      .or("unread_count.gt.0,marked_unread.eq.true")
+      .order("unread_since", { ascending: true, nullsFirst: false })
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(UNREAD_LIMIT),
   ]);
+
+  if (unreadResult.error) throw new Error(unreadResult.error.message);
 
   const upcoming = (pendingResult.data ?? []).map((row) => {
     const chat = Array.isArray(row.chats) ? row.chats[0] : row.chats;
     return { ...row, chats: chat ?? null } as ScheduledMessage;
   });
   const pendingCount = pendingResult.count ?? upcoming.length;
+  const unread = (unreadResult.data ?? []) as Chat[];
+  const unreadCount = unreadResult.count ?? unread.length;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Inicio</h1>
         <p className="text-sm text-muted">
-          Mensajes por enviar, enviados esta semana y fallidos.
+          Conversaciones sin leer, mensajes por enviar y lo de esta semana.
         </p>
       </div>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Sin leer</h2>
+          {unreadCount > 0 ? (
+            <p className="text-sm text-muted">
+              {unreadCount.toLocaleString("es-MX")}
+            </p>
+          ) : null}
+        </div>
+        {unread.length === 0 ? (
+          <p className="text-sm text-muted">
+            No hay conversaciones sin leer ni marcadas como no leídas.
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {unread.map((chat) => {
+              const waiting = chat.unread_count ?? 0;
+              return (
+                <li
+                  key={chat.id}
+                  className="flex flex-col gap-3 rounded-lg border border-separator p-4 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium">{chat.name}</p>
+                    <p className="text-sm text-muted">
+                      {waiting > 0
+                        ? `${waiting.toLocaleString("es-MX")} sin leer`
+                        : "Marcada como no leída"}
+                      {waiting > 0 && chat.marked_unread
+                        ? " · marcada como no leída"
+                        : ""}
+                      {chat.unread_since
+                        ? ` · desde ${formatDateTime(chat.unread_since)}`
+                        : ""}
+                    </p>
+                    {chat.last_message_preview ? (
+                      <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm">
+                        {chat.last_message_from_me ? "Tú: " : ""}
+                        {chat.last_message_preview}
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted">
+                        Sin texto del último mensaje.
+                      </p>
+                    )}
+                  </div>
+                  <Link
+                    href={`/schedule?chat=${chat.id}`}
+                    className="shrink-0 text-sm font-medium"
+                  >
+                    Agendar
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {unreadCount > unread.length ? (
+          <p className="text-sm text-muted">
+            Hay {unreadCount - unread.length} conversaciones más sin leer.
+          </p>
+        ) : null}
+      </section>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <section className="rounded-lg border border-separator p-4">

@@ -18,6 +18,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { searchChats } from "@/app/actions/chats";
 import { scheduleMessage } from "@/app/actions/messages";
+import { formatDateTime } from "@/lib/format";
 import { chatLabel } from "@/lib/phone";
 import type { Chat } from "@/lib/types";
 
@@ -108,6 +109,10 @@ export function ScheduleForm({ selected }: { selected: Chat | null }) {
       : searching
         ? "Buscando..."
         : "Ningún chat coincide.";
+  const context =
+    selected && chatId === selected.id && selected.last_message_preview
+      ? selected
+      : null;
 
   return (
     <form
@@ -147,6 +152,22 @@ export function ScheduleForm({ selected }: { selected: Chat | null }) {
           </ListBox>
         </ComboBox.Popover>
       </ComboBox>
+
+      {context ? (
+        <div className="rounded-lg border border-separator p-3">
+          <p className="text-sm text-muted">
+            {context.unread_since
+              ? `Sin leer desde ${formatDateTime(context.unread_since)}`
+              : context.marked_unread
+                ? "Marcada como no leída"
+                : "Último mensaje"}
+          </p>
+          <p className="mt-2 whitespace-pre-wrap text-sm">
+            {context.last_message_from_me ? "Tú: " : ""}
+            {context.last_message_preview}
+          </p>
+        </div>
+      ) : null}
 
       <TextField value={messageBody} onChange={setMessageBody}>
         <Label>Mensaje</Label>

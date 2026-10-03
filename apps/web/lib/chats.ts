@@ -8,6 +8,9 @@ const SEARCH_LIMIT = 20;
 
 const COLUMNS = "id, user_id, wa_id, name, is_group, updated_at";
 
+const CHAT_COLUMNS =
+  "id, user_id, wa_id, name, is_group, updated_at, unread_count, marked_unread, unread_since, last_message_at, last_message_preview, last_message_from_me";
+
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -98,7 +101,7 @@ export async function getChat(id: string): Promise<Chat | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("chats")
-    .select(COLUMNS)
+    .select(CHAT_COLUMNS)
     .eq("id", id)
     .eq("hidden", false)
     .maybeSingle();

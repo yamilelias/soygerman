@@ -4,6 +4,7 @@ const pino = require("pino");
 const qrcode = require("qrcode");
 const { log } = require("./log");
 const { credsAreRegistered, persistCreds, readStoredCreds, deleteCreds } = require("./auth-store");
+const { absorbChat, absorbMessage, groupChatRows } = require("./unread");
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -197,17 +198,34 @@ function chatName(chat) {
     .trim();
 }
 
+function historyMessage(item) {
+  if (item?.key) return item;
+  if (item?.message?.key) return item.message;
+  return null;
+}
+
 function rememberChat(chats, chat) {
-  if (!chat?.id) return;
-  const isGroup = classifyChat(chat.id, Boolean(chat.isGroup || chat.id.endsWith("@g.us")));
-  if (isGroup === null) return;
-  const previous = chats.get(chat.id);
-  const incoming = chatName(chat);
-  chats.set(chat.id, {
-    waId: chat.id,
-    name: incoming || previous?.name || chat.id,
+  if (!chat?.id) return false;
+  const isGroup = classifyChat(
+    chat.id,
+    Boolean(chat.isGroup || chat.id.endsWith("@g.us")),
+  );
+  if (isGroup === null) return false;
+  const { state, changed } = absorbChat(
+    chats.get(chat.id),
+    { ...chat, name: chatName(chat) },
     isGroup,
-  });
+  );
+  chats.set(chat.id, state);
+  let dirty = changed;
+  if (Array.isArray(chat.messages)) {
+    for (const item of chat.messages) {
+      const message = historyMessage(item);
+      if (!message) continue;
+      if (absorbMessage(state, message).changed) dirty = true;
+    }
+  }
+  return dirty;
 }
 
 class SessionManager {
@@ -379,21 +397,47 @@ class SessionManager {
     });
 
     const take = (items) => {
-      if (!still() || !Array.isArray(items)) return;
-      for (const item of items) rememberChat(entry.chats, item);
-    };
-    sock.ev.on("messaging-history.set", ({ chats, contacts }) => {
-      take(chats);
-      take(contacts);
-      if (still()) {
-        log("sync", `${userId} historial parcial chats=${entry.chats.size}`);
-        this.scheduleAutoSync(userId);
+      if (!still() || !Array.isArray(items)) return false;
+      let changed = false;
+      for (const item of items) {
+        if (rememberChat(entry.chats, item)) changed = true;
       }
+      return changed;
+    };
+    const noteMessages = (messages, notify) => {
+      if (!still() || !Array.isArray(messages)) return false;
+      let changed = false;
+      for (const item of messages) {
+        const message = historyMessage(item);
+        const jid = message?.key?.remoteJid;
+        if (!jid) continue;
+        if (!entry.chats.has(jid)) rememberChat(entry.chats, { id: jid });
+        const state = entry.chats.get(jid);
+        if (!state) continue;
+        if (absorbMessage(state, message, { notify }).changed) changed = true;
+      }
+      return changed;
+    };
+    sock.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
+      const changed = take(chats) || take(contacts) || noteMessages(messages, false);
+      if (!still()) return;
+      log("sync", `${userId} historial parcial chats=${entry.chats.size}`);
+      this.scheduleAutoSync(userId);
+      if (changed) this.scheduleUnreadFlush(userId);
     });
-    sock.ev.on("chats.upsert", take);
-    sock.ev.on("chats.update", take);
+    sock.ev.on("chats.upsert", (items) => {
+      if (take(items)) this.scheduleUnreadFlush(userId);
+    });
+    sock.ev.on("chats.update", (items) => {
+      if (take(items)) this.scheduleUnreadFlush(userId);
+    });
     sock.ev.on("contacts.upsert", take);
     sock.ev.on("contacts.update", take);
+    sock.ev.on("messages.upsert", ({ messages, type }) => {
+      if (noteMessages(messages, type === "notify")) {
+        this.scheduleUnreadFlush(userId);
+      }
+    });
 
     sock.ev.on("connection.update", (update) => {
       void this.onConnectionUpdate(userId, sock, generation, update);
@@ -498,6 +542,7 @@ class SessionManager {
     if (outcome.action === "logout") {
       entry.closing = true;
       this.stopAutoSync(entry);
+      this.stopUnreadFlush(entry);
       this.stopMemory(entry);
       this.clients.delete(userId);
       log("disconnected", `${userId} logout`);
@@ -605,6 +650,7 @@ class SessionManager {
       entry.closing = true;
       entry.generation += 1;
       this.stopAutoSync(entry);
+      this.stopUnreadFlush(entry);
       this.stopMemory(entry);
       this.clients.delete(userId);
       try {
@@ -650,6 +696,7 @@ class SessionManager {
       entry.closing = true;
       entry.generation += 1;
       this.stopAutoSync(entry);
+      this.stopUnreadFlush(entry);
       this.stopMemory(entry);
       this.clients.delete(userId);
       void this.safeEnd(entry.sock);
@@ -714,6 +761,60 @@ class SessionManager {
     if (!entry?.autoSyncTimer) return;
     clearTimeout(entry.autoSyncTimer);
     entry.autoSyncTimer = null;
+  }
+
+  stopUnreadFlush(entry) {
+    if (!entry?.unreadFlush) return;
+    clearTimeout(entry.unreadFlush);
+    entry.unreadFlush = null;
+  }
+
+  scheduleUnreadFlush(userId) {
+    const entry = this.clients.get(userId);
+    if (!entry || entry.closing || entry.status !== "ready" || entry.unreadFlush) {
+      return;
+    }
+    entry.unreadFlush = setTimeout(() => {
+      entry.unreadFlush = null;
+      const current = this.clients.get(userId);
+      if (!current || current.closing || current.status !== "ready") return;
+      void this.flushUnread(userId);
+    }, 4000);
+  }
+
+  async upsertChatRows(userId, chats) {
+    const now = new Date().toISOString();
+    const groups = groupChatRows(userId, chats, now);
+    for (const rows of groups) {
+      for (let index = 0; index < rows.length; index += 200) {
+        const chunk = rows.slice(index, index + 200);
+        const { error } = await this.supabase
+          .from("chats")
+          .upsert(chunk, { onConflict: "user_id,wa_id" });
+        if (error) {
+          log("sync", `${userId} no se guardó: ${error.message}`);
+          throw new Error(error.message);
+        }
+      }
+    }
+  }
+
+  async flushUnread(userId) {
+    const entry = this.clients.get(userId);
+    if (!entry || entry.closing || entry.status !== "ready" || entry.syncing) {
+      if (entry?.syncing) this.scheduleUnreadFlush(userId);
+      return;
+    }
+    const dirty = [...entry.chats.values()].filter((chat) => chat.dirty);
+    if (dirty.length === 0) return;
+    for (const chat of dirty) chat.dirty = false;
+    try {
+      await this.upsertChatRows(userId, dirty);
+      log("sync", `${userId} no leídos actualizados ${dirty.length}`);
+    } catch (error) {
+      for (const chat of dirty) chat.dirty = true;
+      log("sync", `${userId} no guardó no leídos: ${error.message || error}`);
+    }
   }
 
   scheduleAutoSync(userId) {
@@ -784,29 +885,16 @@ class SessionManager {
       throw new Error("No se pudo leer la lista de chats de WhatsApp");
     }
 
-    const now = new Date().toISOString();
-    const rows = [...entry.chats.values()].map((chat) => ({
-      user_id: userId,
-      wa_id: chat.waId,
-      name: chat.name,
-      is_group: chat.isGroup,
-      updated_at: now,
-    }));
+    const chats = [...entry.chats.values()];
+    for (const chat of chats) chat.dirty = false;
     // No incluir `hidden`: el upsert no debe devolver un chat que la persona quitó.
-
-    for (let index = 0; index < rows.length; index += 200) {
-      const chunk = rows.slice(index, index + 200);
-      const { error } = await this.supabase
-        .from("chats")
-        .upsert(chunk, { onConflict: "user_id,wa_id" });
-      if (error) {
-        log("sync", `${userId} no se guardó: ${error.message}`);
-        throw new Error(error.message);
-      }
+    await this.upsertChatRows(userId, chats);
+    if ([...entry.chats.values()].some((chat) => chat.dirty)) {
+      this.scheduleUnreadFlush(userId);
     }
 
-    log("sync", `${userId} guardados ${rows.length}`);
-    return { count: rows.length };
+    log("sync", `${userId} guardados ${chats.length}`);
+    return { count: chats.length };
   }
 
   async restoreSessions() {

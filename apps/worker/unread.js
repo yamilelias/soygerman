@@ -1,0 +1,235 @@
+const READ_STATUS = 4;
+const PLAYED_STATUS = 5;
+const PREVIEW_LIMIT = 500;
+
+function unixSeconds(value) {
+  if (value == null || value === "") return null;
+  let n;
+  if (typeof value === "number") n = value;
+  else if (typeof value === "bigint") n = Number(value);
+  else if (typeof value === "object" && typeof value.toNumber === "function") {
+    n = value.toNumber();
+  } else n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n > 1e12) n = Math.floor(n / 1000);
+  return Math.floor(n);
+}
+
+function blankChat(id, isGroup) {
+  return {
+    waId: id,
+    name: id,
+    isGroup,
+    unreadCount: 0,
+    markedUnread: false,
+    unreadKnown: false,
+    unreadSince: null,
+    lastMessageAt: null,
+    lastMessagePreview: null,
+    lastMessageFromMe: null,
+    lastMessageId: null,
+    dirty: false,
+  };
+}
+
+function snapshot(state) {
+  return [
+    state.name,
+    state.isGroup,
+    state.unreadCount,
+    state.markedUnread,
+    state.unreadKnown,
+    state.unreadSince,
+    state.lastMessageAt,
+    state.lastMessagePreview,
+    state.lastMessageFromMe,
+    state.lastMessageId,
+  ].join("\u0001");
+}
+
+function reconcileUnread(state) {
+  const unread = state.unreadCount > 0;
+  if (state.unreadKnown && !unread && !state.markedUnread) {
+    state.unreadSince = null;
+    return;
+  }
+  if (!unread) {
+    state.unreadSince = null;
+    return;
+  }
+  if (
+    state.unreadSince == null &&
+    state.unreadCount === 1 &&
+    state.lastMessageAt &&
+    state.lastMessageFromMe === false
+  ) {
+    state.unreadSince = state.lastMessageAt;
+  }
+}
+
+function absorbChat(previous, chat, isGroup) {
+  const state = previous ?? blankChat(chat.id, isGroup);
+  const before = snapshot(state);
+  state.waId = chat.id;
+  state.isGroup = Boolean(isGroup);
+  const name = String(chat.name || "")
+    .replaceAll("\u0000", "")
+    .trim();
+  if (name) state.name = name;
+  else if (!state.name) state.name = chat.id;
+
+  const hasCount = chat.unreadCount != null && chat.unreadCount !== "";
+  const hasMarked = chat.markedAsUnread != null;
+  if (hasCount || hasMarked) {
+    state.unreadKnown = true;
+    if (hasCount) {
+      const count = Math.trunc(Number(chat.unreadCount));
+      state.unreadCount = Number.isFinite(count) ? Math.max(0, count) : 0;
+    }
+    if (hasMarked) state.markedUnread = Boolean(chat.markedAsUnread);
+  }
+
+  reconcileUnread(state);
+  const changed = snapshot(state) !== before;
+  if (changed) state.dirty = true;
+  return { state, changed };
+}
+
+function unwrapContent(message) {
+  let current = message;
+  for (let depth = 0; depth < 6 && current; depth += 1) {
+    const inner =
+      current.ephemeralMessage?.message ||
+      current.viewOnceMessage?.message ||
+      current.viewOnceMessageV2?.message ||
+      current.viewOnceMessageV2Extension?.message ||
+      current.documentWithCaptionMessage?.message ||
+      current.editedMessage?.message;
+    if (!inner) break;
+    current = inner;
+  }
+  return current;
+}
+
+function messagePreview(message) {
+  const content = unwrapContent(message);
+  if (!content) return null;
+  if (content.protocolMessage || content.reactionMessage) return null;
+  const text =
+    content.conversation ||
+    content.extendedTextMessage?.text ||
+    content.imageMessage?.caption ||
+    content.videoMessage?.caption ||
+    content.documentMessage?.caption;
+  if (typeof text === "string" && text.replaceAll("\u0000", "").trim()) {
+    return text.replaceAll("\u0000", "").trim();
+  }
+  if (content.imageMessage) return "Imagen";
+  if (content.videoMessage) return "Video";
+  if (content.audioMessage) return "Audio";
+  if (content.stickerMessage) return "Sticker";
+  if (content.documentMessage) {
+    return content.documentMessage.fileName || "Documento";
+  }
+  if (content.contactMessage) {
+    return content.contactMessage.displayName || "Contacto";
+  }
+  if (content.locationMessage || content.liveLocationMessage) return "Ubicación";
+  return null;
+}
+
+function statusNumber(status) {
+  if (status == null || status === "") return null;
+  const n = Number(status);
+  return Number.isFinite(n) ? n : null;
+}
+
+function countsAsUnread(message, notify) {
+  if (message?.key?.fromMe) return false;
+  const status = statusNumber(message?.status);
+  if (status === READ_STATUS || status === PLAYED_STATUS) return false;
+  if (status != null && status < READ_STATUS) return true;
+  return Boolean(notify) && status == null;
+}
+
+function absorbMessage(state, message, { notify = false } = {}) {
+  if (!state || !message?.key) return { changed: false };
+  const before = snapshot(state);
+  const at = unixSeconds(message.messageTimestamp);
+  const fromMe = Boolean(message.key.fromMe);
+  const preview = messagePreview(message.message);
+
+  if (preview && at != null) {
+    const id = message.key.id || null;
+    const newer =
+      state.lastMessageAt == null ||
+      at > state.lastMessageAt ||
+      (at === state.lastMessageAt && id && id !== state.lastMessageId);
+    if (newer) {
+      const sender =
+        !fromMe && state.isGroup ? String(message.pushName || "").trim() : "";
+      const text = sender ? `${sender}: ${preview}` : preview;
+      state.lastMessageAt = at;
+      state.lastMessagePreview = text.slice(0, PREVIEW_LIMIT);
+      state.lastMessageFromMe = fromMe;
+      state.lastMessageId = id;
+    }
+  }
+
+  if (countsAsUnread(message, notify) && at != null) {
+    state.unreadSince =
+      state.unreadSince == null ? at : Math.min(state.unreadSince, at);
+  }
+
+  if (notify && countsAsUnread(message, true)) {
+    state.unreadKnown = true;
+    if (!state.unreadCount) state.unreadCount = 1;
+  }
+
+  reconcileUnread(state);
+  const changed = snapshot(state) !== before;
+  if (changed) state.dirty = true;
+  return { changed };
+}
+
+function isoFromSeconds(seconds) {
+  return new Date(seconds * 1000).toISOString();
+}
+
+function groupChatRows(userId, chats, now) {
+  const groups = new Map();
+  for (const chat of chats) {
+    const row = {
+      user_id: userId,
+      wa_id: chat.waId,
+      name: chat.name,
+      is_group: Boolean(chat.isGroup),
+      updated_at: now,
+    };
+    if (chat.unreadKnown) {
+      const count = chat.unreadCount || 0;
+      row.unread_count = count;
+      row.marked_unread = Boolean(chat.markedUnread);
+      row.unread_since =
+        count > 0 && chat.unreadSince ? isoFromSeconds(chat.unreadSince) : null;
+    }
+    if (chat.lastMessageAt) {
+      row.last_message_at = isoFromSeconds(chat.lastMessageAt);
+      row.last_message_preview = chat.lastMessagePreview;
+      row.last_message_from_me = Boolean(chat.lastMessageFromMe);
+    }
+    const key = Object.keys(row).sort().join("|");
+    const list = groups.get(key);
+    if (list) list.push(row);
+    else groups.set(key, [row]);
+  }
+  return [...groups.values()];
+}
+
+module.exports = {
+  absorbChat,
+  absorbMessage,
+  groupChatRows,
+  unixSeconds,
+  messagePreview,
+};
