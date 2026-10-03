@@ -38,7 +38,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-full md:grid md:grid-cols-[240px_1fr]">
-      <aside className="hidden border-r border-separator md:flex md:flex-col md:gap-6 md:p-4">
+      <aside className="sticky top-0 hidden h-screen shrink-0 flex-col gap-6 self-start border-r border-separator p-4 md:flex">
         <Link href="/dashboard" className="flex items-center gap-3">
           <Image src="/logo.png" alt="" width={40} height={40} />
           <p className="text-lg font-semibold">SoyGerman</p>
