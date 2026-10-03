@@ -41,7 +41,7 @@ Endpoints, todos con `x-worker-secret` y el JWT del usuario, salvo la salud:
 - `GET /health`
 - `POST /sessions/connect`
 - `POST /sessions/disconnect`
-- `POST /sync-chats`
+- `POST /sync-chats`. Al quedar la sesión lista, el worker lo llama solo, unos segundos después del último lote de chats. La pantalla también lo pide al pasar a conectado.
 
 El sync guarda grupos `@g.us` y chats directos `@c.us`, `@s.whatsapp.net` y `@lid`. Ignora `@broadcast` y `@newsletter`. Upsert por `(user_id, wa_id)` en lotes de 200. Junta lo que Baileys emite en chats y contactos, más `groupFetchAllParticipating`, y se queda con el id, el nombre y si es grupo. El número visible sale del propio `wa_id` cuando el host es `@s.whatsapp.net` o `@c.us`.
 

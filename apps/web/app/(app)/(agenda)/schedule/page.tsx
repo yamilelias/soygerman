@@ -17,8 +17,8 @@ export default async function SchedulePage({
     <div className="w-full max-w-xl">
       {total === 0 ? (
         <p className="text-sm text-muted">
-          Todavía no hay chats. Ve a Configuración, conecta WhatsApp y
-          sincroniza.
+          Todavía no hay chats. Ve a Configuración y conecta WhatsApp. La lista
+          llega sola.
         </p>
       ) : (
         <ScheduleForm selected={selected} />

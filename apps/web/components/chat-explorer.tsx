@@ -114,7 +114,7 @@ export function ChatExplorer({
       {chats.length === 0 ? (
         <p className="text-sm text-muted">
           {total === 0 && !query.trim() && kind === "all"
-            ? "No hay chats para mostrar. Los que quitas no vuelven al sincronizar."
+            ? "No hay chats para mostrar. Al conectar, la lista llega sola. Los que quitas no vuelven."
             : "Ningún chat coincide."}
         </p>
       ) : (

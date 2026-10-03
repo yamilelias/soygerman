@@ -387,6 +387,7 @@ class SessionManager {
       take(contacts);
       if (still()) {
         log("sync", `${userId} historial parcial chats=${entry.chats.size}`);
+        this.scheduleAutoSync(userId);
       }
     });
     sock.ev.on("chats.upsert", take);
@@ -490,11 +491,13 @@ class SessionManager {
       if (entry.flushCreds) await entry.flushCreds();
       await persistCreds(this.supabase, userId, credsPath(userId));
       log("ready", `${userId} ${describeMemory()}`);
+      this.scheduleAutoSync(userId);
       return;
     }
 
     if (outcome.action === "logout") {
       entry.closing = true;
+      this.stopAutoSync(entry);
       this.stopMemory(entry);
       this.clients.delete(userId);
       log("disconnected", `${userId} logout`);
@@ -601,6 +604,7 @@ class SessionManager {
     if (entry) {
       entry.closing = true;
       entry.generation += 1;
+      this.stopAutoSync(entry);
       this.stopMemory(entry);
       this.clients.delete(userId);
       try {
@@ -645,6 +649,7 @@ class SessionManager {
     if (entry) {
       entry.closing = true;
       entry.generation += 1;
+      this.stopAutoSync(entry);
       this.stopMemory(entry);
       this.clients.delete(userId);
       void this.safeEnd(entry.sock);
@@ -703,6 +708,43 @@ class SessionManager {
       return;
     }
     log("chats", `${userId} borrados`);
+  }
+
+  stopAutoSync(entry) {
+    if (!entry?.autoSyncTimer) return;
+    clearTimeout(entry.autoSyncTimer);
+    entry.autoSyncTimer = null;
+  }
+
+  scheduleAutoSync(userId) {
+    const entry = this.clients.get(userId);
+    if (!entry || entry.closing) return;
+    this.stopAutoSync(entry);
+    entry.autoSyncTimer = setTimeout(() => {
+      const current = this.clients.get(userId);
+      if (
+        !current ||
+        current.closing ||
+        current.status !== "ready" ||
+        current.syncing
+      ) {
+        return;
+      }
+      if (current.chats.size === 0) {
+        current.autoSyncTries = (current.autoSyncTries ?? 0) + 1;
+        if (current.autoSyncTries <= 6) this.scheduleAutoSync(userId);
+        return;
+      }
+      current.autoSyncTries = 0;
+      current.syncing = true;
+      this.syncChats(userId)
+        .catch((error) => {
+          log("sync", `${userId} automático falló: ${error.message || error}`);
+        })
+        .finally(() => {
+          current.syncing = false;
+        });
+    }, 5000);
   }
 
   async syncChats(userId) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Card, Chip, Spinner } from "@heroui/react";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
   connectWhatsApp,
@@ -36,7 +37,20 @@ const PAIRING_STATUSES: WhatsAppSessionStatus[] = [
   "authenticating",
 ];
 
+async function pullChats() {
+  let lastError = "No se pudieron traer los chats";
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const result = await syncChats();
+    if (!result.error) return { ok: true as const };
+    lastError = result.error;
+    if (!result.error.includes("No se pudo leer")) break;
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
+  return { error: lastError };
+}
+
 export function WhatsAppConnection() {
+  const router = useRouter();
   const [session, setSession] = useState<WhatsAppSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [linking, setLinking] = useState(false);
@@ -46,6 +60,7 @@ export function WhatsAppConnection() {
   const ignoreDisconnect = useRef(false);
   const resumed = useRef(false);
   const previousStatus = useRef<WhatsAppSessionStatus | null>(null);
+  const syncedStamp = useRef<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -134,7 +149,17 @@ export function WhatsAppConnection() {
       sawProgress.current = false;
       ignoreDisconnect.current = false;
       setLinking(false);
-      if (previous && previous !== "connected") setError(null);
+      if (previous && previous !== "connected") {
+        setError(null);
+        if (syncedStamp.current !== session.updated_at) {
+          syncedStamp.current = session.updated_at;
+          startTransition(async () => {
+            const result = await pullChats();
+            if (result.error) setError(result.error);
+            else router.refresh();
+          });
+        }
+      }
       return;
     }
     if (session.status === "disconnected" && sawProgress.current) {
@@ -145,7 +170,7 @@ export function WhatsAppConnection() {
       }
       ignoreDisconnect.current = false;
     }
-  }, [session]);
+  }, [router, session]);
 
   useEffect(() => {
     if (loading || resumed.current || !session) return;
@@ -260,9 +285,8 @@ export function WhatsAppConnection() {
 
         {status === "connected" ? (
           <p className="text-sm text-muted">
-            Conexión exitosa. La sesión está activa. Sincroniza para traer
-            chats individuales y grupos. No se descarga el historial de
-            mensajes.
+            Conexión exitosa. Los chats llegan solos. No se descarga el
+            historial de mensajes.
           </p>
         ) : null}
 
@@ -286,7 +310,7 @@ export function WhatsAppConnection() {
               isDisabled={pending}
               onPress={() => run(syncChats)}
             >
-              Sincronizar chats
+              Volver a sincronizar
             </Button>
           )}
           {status !== "disconnected" || showPairing ? (
