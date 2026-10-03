@@ -50,7 +50,7 @@ function credsPath(userId) {
 function sessionIsRegistered(userId) {
   try {
     const creds = JSON.parse(fs.readFileSync(credsPath(userId), "utf8"));
-    return Boolean(creds.registered);
+    return credsAreRegistered(creds);
   } catch {
     return false;
   }

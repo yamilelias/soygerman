@@ -5,7 +5,10 @@ const { log } = require("./log");
 const CREDS_FILE = "creds.json";
 
 function credsAreRegistered(creds) {
-  return Boolean(creds && creds.registered === true);
+  if (!creds || typeof creds !== "object") return false;
+  if (creds.registered === true) return true;
+  const id = creds.me && creds.me.id;
+  return typeof id === "string" && id.length > 0;
 }
 
 function readCredsFile(filePath) {
@@ -32,6 +35,7 @@ async function persistCreds(supabase, userId, filePath) {
     log("perfil", `${userId} no guardó la credencial: ${error.message}`);
     return false;
   }
+  log("perfil", `${userId} credencial guardada`);
   return true;
 }
 
