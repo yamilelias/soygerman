@@ -49,7 +49,7 @@ async function pullChats() {
   return { error: lastError };
 }
 
-export function WhatsAppConnection() {
+export function WhatsAppConnection({ start = false }: { start?: boolean }) {
   const router = useRouter();
   const [session, setSession] = useState<WhatsAppSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -227,12 +227,14 @@ export function WhatsAppConnection() {
   const showQr = Boolean(qr) && (status === "qr_ready" || status === "authenticating");
 
   return (
-    <Card className="mx-auto w-full max-w-xl">
+    <Card className={`mx-auto w-full ${start ? "max-w-md" : "max-w-xl"}`}>
       <Card.Header className="flex items-center justify-between gap-3">
         <div>
           <Card.Title>WhatsApp</Card.Title>
           <Card.Description>
-            Vincula tu cuenta para sincronizar chats y enviar mensajes.
+            {start
+              ? "Escanea el código para traer tus chats."
+              : "Vincula tu cuenta para sincronizar chats y enviar mensajes."}
           </Card.Description>
         </div>
         <Chip color={statusColor[status]} variant="soft">

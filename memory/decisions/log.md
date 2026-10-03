@@ -73,3 +73,5 @@ Formato: [AAAA-MM-DD] DECISIÓN: ... | RAZONAMIENTO: ... | CONTEXTO: ...
 [2026-10-02] DECISIÓN: El magic link no crea cuentas. El alta es una invitación desde Supabase. | RAZONAMIENTO: La página de login no debe registrar a quien llegue con un correo. Quien ya existe sigue pidiendo el enlace. | CONTEXTO: `shouldCreateUser: false`. El interruptor «Allow new users to sign up» del panel cierra el mismo hueco si alguien llama la API directo.
 
 [2026-10-02] DECISIÓN: Al quedar WhatsApp listo, los chats se sincronizan solos. | RAZONAMIENTO: El botón era un paso de más justo después de escanear el QR. El worker espera a que llegue la lista; la pantalla también pide el sync al ver `connected`, por si el proceso de Render aún no trae este cambio. | CONTEXTO: `POST /sync-chats` sigue disponible para repetirlo.
+
+[2026-10-02] DECISIÓN: Sin chats visibles ni mensajes, la app solo muestra el cuadro de WhatsApp. | RAZONAMIENTO: Una cuenta nueva no puede agendar ni revisar nada. El primer paso es vincular. | CONTEXTO: En cuanto el sync deja chats, vuelve el menú. Si ya hay historial de mensajes, el menú se queda aunque no haya chats.
