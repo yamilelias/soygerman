@@ -45,6 +45,8 @@ Endpoints, todos con `x-worker-secret` y el JWT del usuario, salvo la salud:
 
 El sync guarda grupos `@g.us` y chats directos `@c.us`, `@s.whatsapp.net` y `@lid`. Ignora `@broadcast` y `@newsletter`. Upsert por `(user_id, wa_id)` en lotes de 200. Junta lo que Baileys emite en chats y contactos, más `groupFetchAllParticipating`, y se queda con el id, el nombre y si es grupo. El número visible sale del propio `wa_id` cuando el host es `@s.whatsapp.net` o `@c.us`.
 
+Si la lista se corta en una letra, cuenta primero las filas de `chats`. El 2026-10-02 había 2618 guardados y la pantalla llegaba a la E: una sola consulta, ordenada por nombre, devuelve 1000 y cae a mitad de esa letra. No era un sync a medias. La búsqueda del número lleva un `%` antes del `@` (`%521%@s.whatsapp.net`). Sin ese `%` solo entran los que terminan en esos dígitos. Un `@lid` no se muestra ni se busca como teléfono.
+
 El cron es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` con «WhatsApp no está conectado para este usuario». Si sale, `sent`. Si `sendMessage` falla, `failed` y el error se corta a 500 caracteres. Un envío puede retrasarse hasta unos 60 segundos. Un `@c.us` guardado antes se manda como `@s.whatsapp.net`. Cada 8 s, mientras vincula, el worker anota la RAM del proceso.
 
 ## Dónde corre
