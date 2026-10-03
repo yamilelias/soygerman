@@ -18,6 +18,7 @@ Tablas:
 
 - `profiles`: se crea con el trigger `handle_new_user` al insertar en `auth.users`.
 - `whatsapp_sessions`: una por usuario. Estados `disconnected`, `connecting`, `qr_ready`, `authenticating`, `connected`, `interrupted`. Realtime con `REPLICA IDENTITY FULL`. El dashboard se entera del QR, del escaneo, de una caída y del resultado por ese canal.
+- `whatsapp_auth_files`: copia de `creds.json` cuando `registered` es true. Solo el service role. No está en Realtime. Sirve para reabrir el socket sin QR.
 - `chats`: UUID propio, `wa_id` único por usuario. Directos y grupos. No se guarda historial de mensajes. No se borran al sincronizar. Al pasar la sesión a `disconnected`, el worker los borra. Los mensajes ya cerrados quedan con `chat_id` nulo. Los `pending` y `processing` pasan a `failed`. El teléfono de un directo es la parte numérica de un `wa_id` `@s.whatsapp.net` o `@c.us`. Un `@lid` no es un teléfono. PostgREST devuelve como máximo 1000 filas por consulta. Chats y Agendar filtran en Postgres por nombre o por esos dígitos y piden una página corta; no cargan la lista entera en el navegador.
 - `scheduled_messages`: `pending`, `processing`, `sent`, `cancelled`, `failed`.
 
@@ -33,7 +34,7 @@ Rutas protegidas: `/dashboard`, `/chats`, `/schedule`, `/pending`, `/history`, `
 
 ## Worker
 
-Un socket de Baileys por `user_id`. Las credenciales viven en `BAILEYS_DATA_PATH/session-<user_id>` (`useMultiFileAuthState`). No abre Chromium. El historial completo no se pide (`syncType` FULL se rechaza; el bootstrap y lo reciente sí, para LID y grupos). El dispositivo se anuncia como SoyGerman. Cómo se leía un intento trabado con Puppeteer está en `memory/references/sops/whatsapp-linking.md`.
+Un socket de Baileys por `user_id`. La credencial vive en `BAILEYS_DATA_PATH/session-<user_id>` (`useMultiFileAuthState`) y, cuando ya está registrada, se copia en `whatsapp_auth_files`. Un corte 428 o 408 reabre ese archivo: no pide otro QR ni borra los chats. El navegador no puede leer esa tabla. Los chats se borran solo si la persona desconecta o WhatsApp cierra la sesión (401). No abre Chromium. El historial completo no se pide (`syncType` FULL se rechaza; el bootstrap y lo reciente sí, para LID y grupos). El dispositivo se anuncia como SoyGerman. Cómo se leía un intento trabado con Puppeteer está en `memory/references/sops/whatsapp-linking.md`.
 
 Endpoints, todos con `x-worker-secret` y el JWT del usuario, salvo la salud:
 
