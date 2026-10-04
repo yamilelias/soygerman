@@ -86,6 +86,15 @@ app.post("/digests/run", authenticate, async (req, res, next) => {
   }
 });
 
+app.post("/refresh-unread", authenticate, async (req, res, next) => {
+  try {
+    const result = await sessions.refreshUnread(req.userId);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/sync-chats", authenticate, async (req, res, next) => {
   try {
     const result = await sessions.syncChats(req.userId);

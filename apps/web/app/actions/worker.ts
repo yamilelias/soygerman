@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 
-async function callWorker(path: string) {
+async function callWorker(path: string, timeoutMs?: number) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -34,6 +34,7 @@ async function callWorker(path: string) {
         Authorization: `Bearer ${session.access_token}`,
       },
       cache: "no-store",
+      signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
     });
     const body = (await response.json().catch(() => ({}))) as {
       error?: string;
@@ -71,5 +72,11 @@ export async function disconnectWhatsApp() {
 export async function syncChats() {
   const result = await callWorker("/sync-chats");
   if ("ok" in result) revalidatePath("/chats");
+  return result;
+}
+
+export async function refreshUnread() {
+  const result = await callWorker("/refresh-unread", 25000);
+  if ("ok" in result) revalidatePath("/dashboard");
   return result;
 }

@@ -228,3 +228,49 @@ test("un chat archivado se guarda como archivado y un aviso posterior no lo desa
   );
   assert.equal(unarchived[0][0].archived, false);
 });
+
+test("marcar como leído deja el conteo en cero", () => {
+  const opened = absorbChat(
+    null,
+    { id: "521@s.whatsapp.net", name: "Ana", unreadCount: 2 },
+    false,
+  );
+  const read = absorbChat(
+    opened.state,
+    { id: "521@s.whatsapp.net", unreadCount: 0 },
+    false,
+  );
+  assert.equal(read.state.unreadCount, 0);
+  assert.equal(read.state.markedUnread, false);
+  assert.equal(read.state.unreadSince, null);
+});
+
+test("marcar como no leído no se confunde con cero", () => {
+  const { state } = absorbChat(
+    null,
+    { id: "521@s.whatsapp.net", name: "Ana", unreadCount: -1 },
+    false,
+  );
+  assert.equal(state.markedUnread, true);
+  assert.equal(state.unreadCount, 0);
+});
+
+test("responder en vivo marca la conversación como leída", () => {
+  const opened = absorbChat(
+    null,
+    { id: "521@s.whatsapp.net", name: "Ana", unreadCount: 2, markedAsUnread: true },
+    false,
+  );
+  absorbMessage(
+    opened.state,
+    {
+      key: { fromMe: true, id: "reply" },
+      messageTimestamp: 1_700_000_900,
+      message: { conversation: "ya quedó" },
+    },
+    { live: true },
+  );
+  assert.equal(opened.state.unreadCount, 0);
+  assert.equal(opened.state.markedUnread, false);
+  assert.equal(opened.state.lastMessagePreview, "ya quedó");
+});

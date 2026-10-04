@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UnreadInbox } from "@/components/unread-inbox";
 import { formatDateTime } from "@/lib/format";
 import type { Chat, DailyDigest, DigestItem, ScheduledMessage } from "@/lib/types";
 import { currentWeekInMexico, formatWeekRange, mexicoDateString } from "@/lib/week";
@@ -81,69 +82,7 @@ export default async function DashboardPage() {
         <TodayDigest digest={digest} items={digestItems} />
       </section>
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Sin leer</h2>
-          {unreadCount > 0 ? (
-            <p className="text-sm text-muted">
-              {unreadCount.toLocaleString("es-MX")}
-            </p>
-          ) : null}
-        </div>
-        {unread.length === 0 ? (
-          <p className="text-sm text-muted">
-            No hay conversaciones sin leer ni marcadas como no leídas.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {unread.map((chat) => {
-              const waiting = chat.unread_count ?? 0;
-              return (
-                <li
-                  key={chat.id}
-                  className="flex flex-col gap-3 rounded-lg border border-separator p-4 sm:flex-row sm:items-start sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium">{chat.name}</p>
-                    <p className="text-sm text-muted">
-                      {waiting > 0
-                        ? `${waiting.toLocaleString("es-MX")} sin leer`
-                        : "Marcada como no leída"}
-                      {waiting > 0 && chat.marked_unread
-                        ? " · marcada como no leída"
-                        : ""}
-                      {chat.unread_since
-                        ? ` · desde ${formatDateTime(chat.unread_since)}`
-                        : ""}
-                    </p>
-                    {chat.last_message_preview ? (
-                      <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm">
-                        {chat.last_message_from_me ? "Tú: " : ""}
-                        {chat.last_message_preview}
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-sm text-muted">
-                        Sin texto del último mensaje.
-                      </p>
-                    )}
-                  </div>
-                  <Link
-                    href={`/schedule?chat=${chat.id}`}
-                    className="shrink-0 text-sm font-medium"
-                  >
-                    Agendar
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        {unreadCount > unread.length ? (
-          <p className="text-sm text-muted">
-            Hay {unreadCount - unread.length} conversaciones más sin leer.
-          </p>
-        ) : null}
-      </section>
+      <UnreadInbox chats={unread} total={unreadCount} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <section className="rounded-lg border border-separator p-4">

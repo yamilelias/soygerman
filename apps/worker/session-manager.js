@@ -466,7 +466,7 @@ class SessionManager {
       }
       return changed;
     };
-    const noteMessages = (messages, notify) => {
+    const noteMessages = (messages, { notify = false, live = false } = {}) => {
       if (!still() || !Array.isArray(messages)) return false;
       let changed = false;
       for (const item of messages) {
@@ -476,12 +476,12 @@ class SessionManager {
         if (!entry.chats.has(jid)) rememberChat(entry.chats, { id: jid });
         const state = entry.chats.get(jid);
         if (!state) continue;
-        if (absorbMessage(state, message, { notify }).changed) changed = true;
+        if (absorbMessage(state, message, { notify, live }).changed) changed = true;
       }
       return changed;
     };
     sock.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
-      const changed = take(chats) || take(contacts) || noteMessages(messages, false);
+      const changed = take(chats) || take(contacts) || noteMessages(messages);
       if (!still()) return;
       log("sync", `${userId} historial parcial chats=${entry.chats.size}`);
       this.scheduleAutoSync(userId);
@@ -496,7 +496,7 @@ class SessionManager {
     sock.ev.on("contacts.upsert", take);
     sock.ev.on("contacts.update", take);
     sock.ev.on("messages.upsert", ({ messages, type }) => {
-      if (noteMessages(messages, type === "notify")) {
+      if (noteMessages(messages, { notify: type === "notify", live: true })) {
         this.scheduleUnreadFlush(userId);
       }
     });
@@ -859,6 +859,18 @@ class SessionManager {
         }
       }
     }
+  }
+
+  async refreshUnread(userId) {
+    const entry = this.clients.get(userId);
+    if (!entry || entry.closing || entry.status !== "ready") {
+      return { refreshed: false };
+    }
+    this.stopUnreadFlush(entry);
+    await entry.sock.resyncAppState(["regular_low"], false);
+    this.stopUnreadFlush(entry);
+    await this.flushUnread(userId);
+    return { refreshed: true };
   }
 
   async flushUnread(userId) {

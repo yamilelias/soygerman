@@ -90,7 +90,13 @@ function absorbChat(previous, chat, isGroup) {
     state.unreadKnown = true;
     if (hasCount) {
       const count = Math.trunc(Number(chat.unreadCount));
-      state.unreadCount = Number.isFinite(count) ? Math.max(0, count) : 0;
+      if (Number.isFinite(count)) {
+        if (count < 0) state.markedUnread = true;
+        else {
+          state.unreadCount = count;
+          if (count === 0) state.markedUnread = false;
+        }
+      }
     }
     if (hasMarked) state.markedUnread = Boolean(chat.markedAsUnread);
   }
@@ -162,7 +168,7 @@ function countsAsUnread(message, notify) {
   return Boolean(notify) && status == null;
 }
 
-function absorbMessage(state, message, { notify = false } = {}) {
+function absorbMessage(state, message, { notify = false, live = false } = {}) {
   if (!state || !message?.key) return { changed: false };
   const before = snapshot(state);
   const at = unixSeconds(message.messageTimestamp);
@@ -197,6 +203,12 @@ function absorbMessage(state, message, { notify = false } = {}) {
   if (notify && countsAsUnread(message, true)) {
     state.unreadKnown = true;
     if (!state.unreadCount) state.unreadCount = 1;
+  }
+
+  if (live && fromMe && preview) {
+    state.unreadKnown = true;
+    state.unreadCount = 0;
+    state.markedUnread = false;
   }
 
   reconcileUnread(state);
