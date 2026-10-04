@@ -19,10 +19,11 @@ Tablas:
 - `profiles`: se crea con el trigger `handle_new_user` al insertar en `auth.users`.
 - `whatsapp_sessions`: una por usuario. Estados `disconnected`, `connecting`, `qr_ready`, `authenticating`, `connected`, `interrupted`. Realtime con `REPLICA IDENTITY FULL`. El dashboard se entera del QR, del escaneo, de una caída y del resultado por ese canal.
 - `whatsapp_auth_files`: copia de `creds.json` cuando ya hay `me.id` o `registered` es true. Solo el service role. No está en Realtime. Sirve para reabrir el socket sin QR.
-- `chats`: UUID propio, `wa_id` único por usuario. Directos y grupos. No se guarda el historial. Sí el no leído: `unread_count`, `marked_unread`, `archived` (no entra en Sin leer), `unread_since` (el entrante sin leer más viejo que llegó en el sync reciente; un solo no leído usa la hora de ese mensaje; marcada a mano y ya leída no inventa fecha) y el último texto (`last_message_preview`, `last_message_at`, `last_message_from_me`). Esas columnas se escriben solo cuando el worker las conoce, para no borrarlas en un upsert de solo nombre. No se borran al sincronizar. `hidden` saca un chat de Chats, de Agendar y de Sin leer; el upsert no escribe esa columna, así que no reaparece. Al quitarlo, sus mensajes `pending` pasan a `cancelled`. Al pasar la sesión a `disconnected`, el worker los borra. Los mensajes ya cerrados quedan con `chat_id` nulo. Los `pending` y `processing` pasan a `failed`. El teléfono de un directo es la parte numérica de un `wa_id` `@s.whatsapp.net` o `@c.us`. Un `@lid` no es un teléfono. PostgREST devuelve como máximo 1000 filas por consulta. Chats y Agendar filtran en Postgres por nombre o por esos dígitos y piden una página corta; no cargan la lista entera en el navegador.
+- `chats`: UUID propio, `wa_id` único por usuario. Directos y grupos. No se guarda el historial. Sí la clave del último mensaje (`last_message_key`: id, fromMe, participant) para pedir contexto en el resumen, y el no leído: `unread_count`, `marked_unread`, `archived` (no entra en Sin leer), `unread_since` (el entrante sin leer más viejo que llegó en el sync reciente; un solo no leído usa la hora de ese mensaje; marcada a mano y ya leída no inventa fecha) y el último texto (`last_message_preview`, `last_message_at`, `last_message_from_me`). Esas columnas se escriben solo cuando el worker las conoce, para no borrarlas en un upsert de solo nombre. No se borran al sincronizar. `hidden` saca un chat de Chats, de Agendar y de Sin leer; el upsert no escribe esa columna, así que no reaparece. Al quitarlo, sus mensajes `pending` pasan a `cancelled`. Al pasar la sesión a `disconnected`, el worker los borra. Los mensajes ya cerrados quedan con `chat_id` nulo. Los `pending` y `processing` pasan a `failed`. El teléfono de un directo es la parte numérica de un `wa_id` `@s.whatsapp.net` o `@c.us`. Un `@lid` no es un teléfono. PostgREST devuelve como máximo 1000 filas por consulta. Chats y Agendar filtran en Postgres por nombre o por esos dígitos y piden una página corta; no cargan la lista entera en el navegador.
 - `scheduled_messages`: `pending`, `processing`, `sent`, `cancelled`, `failed`.
+- `daily_digests`: un resumen por usuario y fecha de Ciudad de México. Estados `running`, `ready`, `empty`, `failed`. Guarda el párrafo y las acciones (`chat_id`, `name`, `action`), no el hilo. La persona solo lee el suyo. Lo escribe el service role.
 
-RLS: cada quien lee y escribe lo suyo. En mensajes agendados solo puede insertar `pending` y pasar de `pending` a `cancelled`. No puede falsificar `sent` o `failed`.
+RLS: cada quien lee y escribe lo suyo. En mensajes agendados solo puede insertar `pending` y pasar de `pending` a `cancelled`. No puede falsificar `sent` o `failed`. El resumen diario solo se lee.
 
 `claim_due_messages(batch_limit default 20)` la ejecuta solo `service_role`.
 
@@ -30,7 +31,7 @@ RLS: cada quien lee y escribe lo suyo. En mensajes agendados solo puede insertar
 
 Magic link con PKCE. El formulario llama `signInWithOtp` con `shouldCreateUser: false` y el redirect es `{origen}/auth/callback`. Esa ruta cambia el `code` por sesión. Un correo nuevo no crea cuenta: el alta es la invitación desde el panel de Supabase.
 
-Rutas protegidas: `/dashboard`, `/chats`, `/schedule`, `/pending`, `/history`, `/settings`. Sin sesión vuelven a `/login`. Si no hay chats visibles ni mensajes, esas rutas muestran solo el cuadro para conectar WhatsApp. El menú de escritorio es Inicio, Chats, Agendar y Configuración, en una columna de `100vh`. En el teléfono el pie es Chats, Agendar y Configuración; el logo abre el inicio. Agendar, Pendientes e Historial comparten la vista de mensajes y cada una conserva su URL. Al abrir Agendar, la fecha queda en el día siguiente a la hora en que se abrió la vista. Configuración tiene la cuenta en solo lectura, el tema y la vinculación de WhatsApp. El inicio lista las conversaciones sin leer y las marcadas como no leídas, con el último texto y un enlace a Agendar (`/schedule?chat=`). Abajo siguen los pendientes, los enviados de la semana (lunes a domingo, hora de Ciudad de México) y los fallidos acumulados.
+Rutas protegidas: `/dashboard`, `/chats`, `/schedule`, `/pending`, `/history`, `/settings`. Sin sesión vuelven a `/login`. Si no hay chats visibles ni mensajes, esas rutas muestran solo el cuadro para conectar WhatsApp. El menú de escritorio es Inicio, Chats, Agendar y Configuración, en una columna de `100vh`. En el teléfono el pie es Chats, Agendar y Configuración; el logo abre el inicio. Agendar, Pendientes e Historial comparten la vista de mensajes y cada una conserva su URL. Al abrir Agendar, la fecha queda en el día siguiente a la hora en que se abrió la vista. Configuración tiene la cuenta en solo lectura, el tema y la vinculación de WhatsApp. El inicio abre con Para hoy: el resumen de esa fecha, o el aviso de que sale a las 6:00 si aún no hay fila. Después lista las conversaciones sin leer y las marcadas como no leídas, con el último texto y un enlace a Agendar (`/schedule?chat=`). Abajo siguen los pendientes, los enviados de la semana (lunes a domingo, hora de Ciudad de México) y los fallidos acumulados.
 
 ## Worker
 
@@ -42,12 +43,15 @@ Endpoints, todos con `x-worker-secret` y el JWT del usuario, salvo la salud:
 - `POST /sessions/connect`
 - `POST /sessions/disconnect`
 - `POST /sync-chats`. Al quedar la sesión lista, el worker lo llama solo, unos segundos después del último lote de chats. La pantalla también lo pide al pasar a conectado.
+- `POST /digests/run`. Genera otra vez el resumen de hoy para quien llama. El cron de las 6:00 no lo regenera si ya quedó `ready` o `empty`.
 
 El sync guarda grupos `@g.us` y chats directos `@c.us`, `@s.whatsapp.net` y `@lid`. Ignora `@broadcast` y `@newsletter`. Upsert por `(user_id, wa_id)` en lotes de 200. Junta lo que Baileys emite en chats, contactos y mensajes, más `groupFetchAllParticipating`. Se queda con el id, el nombre, si es grupo, el no leído y el último texto. Un mensaje nuevo con la sesión ya abierta se escribe unos segundos después, sin repetir toda la lista. El número visible sale del propio `wa_id` cuando el host es `@s.whatsapp.net` o `@c.us`.
 
 Si la lista se corta en una letra, cuenta primero las filas de `chats`. El 2026-10-02 había 2618 guardados y la pantalla llegaba a la E: una sola consulta, ordenada por nombre, devuelve 1000 y cae a mitad de esa letra. No era un sync a medias. La búsqueda del número lleva un `%` antes del `@` (`%521%@s.whatsapp.net`). Sin ese `%` solo entran los que terminan en esos dígitos. Un `@lid` no se muestra ni se busca como teléfono.
 
-El cron es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` con «WhatsApp no está conectado para este usuario». Si sale, `sent`. Si `sendMessage` falla, `failed` y el error se corta a 500 caracteres. Un envío puede retrasarse hasta unos 60 segundos. Un `@c.us` guardado antes se manda como `@s.whatsapp.net`. Cada 8 s, mientras vincula, el worker anota la RAM del proceso.
+El cron de envío es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` con «WhatsApp no está conectado para este usuario». Si sale, `sent`. Si `sendMessage` falla, `failed` y el error se corta a 500 caracteres. Un envío puede retrasarse hasta unos 60 segundos. Un `@c.us` guardado antes se manda como `@s.whatsapp.net`. Cada 8 s, mientras vincula, el worker anota la RAM del proceso.
+
+Otro cron, `0 6 * * *` en `America/Mexico_City`, resume los chats sin leer y no archivados de cada sesión `connected`. El modelo es `gpt-6-luna` por LangChain (`apps/worker/llm.js`); `DIGEST_MODEL` lo cambia sin tocar el flujo. Lotes de 40, tope 200. Si el último texto no alcanza, pide 5 mensajes a WhatsApp y no los guarda. Sin chats sin leer queda `empty` y no llama al modelo.
 
 ## Dónde corre
 
@@ -59,7 +63,7 @@ El cron es `* * * * *`. Si la sesión no está lista, el mensaje queda `failed` 
 
 Web: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `WORKER_API_SECRET`, `WORKER_URL`.
 
-Worker: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_API_SECRET`, `WEB_ORIGIN`, `PORT`, `BAILEYS_DATA_PATH`.
+Worker: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_API_SECRET`, `WEB_ORIGIN`, `PORT`, `BAILEYS_DATA_PATH`, `OPENAI_API_KEY`. Opcional: `DIGEST_MODEL` (si falta, `gpt-6-luna`).
 
 El mismo `WORKER_API_SECRET` en ambas. El service role solo en el worker.
 

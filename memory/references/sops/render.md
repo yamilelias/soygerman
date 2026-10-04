@@ -6,7 +6,7 @@ Servicio en línea desde el 2026-09-29. Workspace `tea-csp9avbgbbvc73ceiu30`. En
 
 - Web Service, Dockerfile `apps/worker/Dockerfile`, contexto `apps/worker`.
 - Disco persistente en `/data`. `BAILEYS_DATA_PATH=/data/baileys`. Un perfil viejo en `/data/wwebjs` no se restaura.
-- Variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_API_SECRET`, `WEB_ORIGIN`, `PORT`.
+- Variables: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `WORKER_API_SECRET`, `WEB_ORIGIN`, `PORT`, `OPENAI_API_KEY`. `DIGEST_MODEL` es opcional.
 - El 2026-09-30 `GET /health` por HTTPS devolvió `access-control-allow-origin: http://localhost:3000`. `WEB_ORIGIN` seguía en local. Las server actions no miran CORS; un `fetch` del navegador sí. El valor que corresponde a producción es `https://www.soygerman.com`.
 - Health check: `GET /health`.
 - Al arrancar, restaura `session-<uuid>` si `creds.json` tiene `me.id` o `registered`. Sin eso, la carpeta es un QR a medias y se borra. Si el disco no la trae, se copia desde `whatsapp_auth_files`.
