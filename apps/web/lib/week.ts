@@ -51,6 +51,15 @@ function mexicoMidnight(year: number, month: number, day: number) {
   return new Date(`${year}-${pad(month)}-${pad(day)}T00:00:00${offset}`);
 }
 
+export function mexicoDateString(now = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
 export function currentWeekInMexico(now = new Date()) {
   const today = calendarInMexico(now);
   const monday = shiftCalendar(

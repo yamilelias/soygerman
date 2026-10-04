@@ -36,6 +36,27 @@ export type MessageStatus =
   | "cancelled"
   | "failed";
 
+export type DigestStatus = "running" | "ready" | "empty" | "failed";
+
+export type DigestItem = {
+  chat_id: string;
+  name: string;
+  action: string;
+};
+
+export type DailyDigest = {
+  id: string;
+  user_id: string;
+  digest_date: string;
+  status: DigestStatus;
+  overview: string | null;
+  items: DigestItem[];
+  error_message: string | null;
+  model: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type ScheduledMessage = {
   id: string;
   user_id: string;

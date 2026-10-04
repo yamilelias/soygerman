@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/format";
-import type { Chat, ScheduledMessage } from "@/lib/types";
-import { currentWeekInMexico, formatWeekRange } from "@/lib/week";
+import type { Chat, DailyDigest, DigestItem, ScheduledMessage } from "@/lib/types";
+import { currentWeekInMexico, formatWeekRange, mexicoDateString } from "@/lib/week";
 import { createClient } from "@/utils/supabase/server";
 
 const unreadColumns =
@@ -16,7 +16,7 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const week = currentWeekInMexico();
 
-  const [pendingResult, sentResult, failedResult, unreadResult] =
+  const [pendingResult, sentResult, failedResult, unreadResult, digestResult] =
     await Promise.all([
     supabase
       .from("scheduled_messages")
@@ -43,9 +43,17 @@ export default async function DashboardPage() {
       .order("unread_since", { ascending: true, nullsFirst: false })
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(UNREAD_LIMIT),
+    supabase
+      .from("daily_digests")
+      .select(
+        "id, user_id, digest_date, status, overview, items, error_message, model, created_at, updated_at",
+      )
+      .eq("digest_date", mexicoDateString())
+      .maybeSingle(),
   ]);
 
   if (unreadResult.error) throw new Error(unreadResult.error.message);
+  if (digestResult.error) throw new Error(digestResult.error.message);
 
   const upcoming = (pendingResult.data ?? []).map((row) => {
     const chat = Array.isArray(row.chats) ? row.chats[0] : row.chats;
@@ -54,15 +62,24 @@ export default async function DashboardPage() {
   const pendingCount = pendingResult.count ?? upcoming.length;
   const unread = (unreadResult.data ?? []) as Chat[];
   const unreadCount = unreadResult.count ?? unread.length;
+  const digest = (digestResult.data ?? null) as DailyDigest | null;
+  const digestItems = Array.isArray(digest?.items)
+    ? (digest.items as DigestItem[])
+    : [];
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold">Inicio</h1>
         <p className="text-sm text-muted">
-          Conversaciones sin leer, mensajes por enviar y lo de esta semana.
+          El resumen de hoy, conversaciones sin leer y lo de esta semana.
         </p>
       </div>
+
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Para hoy</h2>
+        <TodayDigest digest={digest} items={digestItems} />
+      </section>
 
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
@@ -177,6 +194,77 @@ export default async function DashboardPage() {
           </p>
         ) : null}
       </section>
+    </div>
+  );
+}
+
+function TodayDigest({
+  digest,
+  items,
+}: {
+  digest: DailyDigest | null;
+  items: DigestItem[];
+}) {
+  if (!digest) {
+    return (
+      <p className="text-sm text-muted">El resumen sale a las 6:00.</p>
+    );
+  }
+  if (digest.status === "running") {
+    return (
+      <p className="text-sm text-muted">
+        El resumen de hoy se está preparando.
+      </p>
+    );
+  }
+  if (digest.status === "failed") {
+    return (
+      <p className="text-sm text-muted">
+        {digest.error_message || "No se pudo preparar el resumen."}
+      </p>
+    );
+  }
+  if (digest.status === "empty") {
+    return (
+      <p className="text-sm text-muted">
+        No hay conversaciones sin leer para resumir.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-sm text-muted">
+        Generado {formatDateTime(digest.updated_at)}
+      </p>
+      {digest.overview ? (
+        <p className="whitespace-pre-wrap text-sm">{digest.overview}</p>
+      ) : null}
+      {items.length === 0 ? (
+        <p className="text-sm text-muted">
+          No hay actividades pendientes en los chats sin leer.
+        </p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {items.map((item) => (
+            <li
+              key={item.chat_id}
+              className="flex flex-col gap-3 rounded-lg border border-separator p-4 sm:flex-row sm:items-start sm:justify-between"
+            >
+              <div className="min-w-0">
+                <p className="font-medium">{item.name}</p>
+                <p className="mt-2 whitespace-pre-wrap text-sm">{item.action}</p>
+              </div>
+              <Link
+                href={`/schedule?chat=${item.chat_id}`}
+                className="shrink-0 text-sm font-medium"
+              >
+                Agendar
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
