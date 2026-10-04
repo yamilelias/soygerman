@@ -6,6 +6,7 @@ const { createClient } = require("@supabase/supabase-js");
 const { SessionManager, describeMemory } = require("./session-manager");
 const { requireUser } = require("./auth");
 const { startCron } = require("./cron");
+const { runDigestForUser } = require("./digest");
 const { log } = require("./log");
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -65,6 +66,21 @@ app.post("/sessions/disconnect", authenticate, async (req, res, next) => {
   try {
     await sessions.disconnect(req.userId);
     res.json({ status: "disconnected" });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/digests/run", authenticate, async (req, res, next) => {
+  try {
+    const result = await runDigestForUser(supabase, sessions, req.userId, {
+      force: true,
+    });
+    if (!result) {
+      res.status(409).json({ error: "El resumen de hoy ya se está preparando" });
+      return;
+    }
+    res.json(result);
   } catch (error) {
     next(error);
   }

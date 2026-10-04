@@ -1,5 +1,6 @@
 const cron = require("node-cron");
 const { toBaileysJid } = require("./session-manager");
+const { runDailyDigests } = require("./digest");
 
 function truncate(message) {
   const text = message || "Error desconocido";
@@ -49,6 +50,16 @@ function startCron(supabase, sessions) {
       }
     }
   });
+
+  cron.schedule(
+    "0 6 * * *",
+    () => {
+      runDailyDigests(supabase, sessions).catch((error) => {
+        console.error("resumen", error.message || error);
+      });
+    },
+    { timezone: "America/Mexico_City" },
+  );
 }
 
 module.exports = { startCron };

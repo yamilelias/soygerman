@@ -4,7 +4,7 @@ const pino = require("pino");
 const qrcode = require("qrcode");
 const { log } = require("./log");
 const { credsAreRegistered, persistCreds, readStoredCreds, deleteCreds } = require("./auth-store");
-const { absorbChat, absorbMessage, groupChatRows } = require("./unread");
+const { absorbChat, absorbMessage, groupChatRows, messagePreview } = require("./unread");
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -166,6 +166,18 @@ function shouldSyncHistory(syncType) {
   return syncType !== HISTORY_SYNC_FULL;
 }
 
+function waitForCount(list, count, ms) {
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const timer = setInterval(() => {
+      if (list.length >= count || Date.now() - started >= ms) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 200);
+  });
+}
+
 function toBaileysJid(waId) {
   if (typeof waId !== "string") return waId;
   if (waId.endsWith("@c.us")) return `${waId.slice(0, -5)}@s.whatsapp.net`;
@@ -241,6 +253,56 @@ class SessionManager {
 
   isReady(userId) {
     return this.clients.get(userId)?.status === "ready";
+  }
+
+  async recentTexts(userId, chat) {
+    const key = chat?.last_message_key;
+    const sock = this.getClient(userId);
+    if (!key?.id || !chat?.last_message_at || !sock?.fetchMessageHistory) return [];
+    const remoteJid = toBaileysJid(chat.wa_id);
+    const collected = [];
+    const onHistory = (payload) => {
+      const messages = Array.isArray(payload?.messages) ? payload.messages : [];
+      for (const item of messages) {
+        const message = historyMessage(item);
+        const jid = message?.key?.remoteJid;
+        if (!message || (jid !== remoteJid && jid !== chat.wa_id)) continue;
+        const preview = messagePreview(message.message);
+        if (!preview) continue;
+        const at = Number(message.messageTimestamp) || 0;
+        const fromMe = Boolean(message.key.fromMe);
+        const sender =
+          !fromMe && message.pushName ? `${String(message.pushName).trim()}: ` : "";
+        collected.push({
+          at,
+          text: `${fromMe ? "Tú: " : sender}${preview}`,
+        });
+      }
+    };
+    sock.ev.on("messaging-history.set", onHistory);
+    try {
+      const timestampMs = new Date(chat.last_message_at).getTime();
+      if (!Number.isFinite(timestampMs)) return [];
+      await sock.fetchMessageHistory(
+        5,
+        {
+          remoteJid,
+          id: key.id,
+          fromMe: Boolean(key.fromMe),
+          ...(key.participant ? { participant: key.participant } : {}),
+        },
+        timestampMs,
+      );
+      await waitForCount(collected, 5, 8000);
+    } catch (error) {
+      log("resumen", `${userId} no pidió contexto: ${error.message || error}`);
+      return [];
+    } finally {
+      sock.ev.off("messaging-history.set", onHistory);
+    }
+    collected.sort((left, right) => left.at - right.at);
+    const texts = collected.map((item) => item.text);
+    return texts.length > 5 ? texts.slice(-5) : texts;
   }
 
   async upsertSession(userId, fields) {
