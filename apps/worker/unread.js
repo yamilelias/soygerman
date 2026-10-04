@@ -30,6 +30,7 @@ function blankChat(id, isGroup) {
     lastMessagePreview: null,
     lastMessageFromMe: null,
     lastMessageId: null,
+    lastMessageParticipant: null,
     dirty: false,
   };
 }
@@ -48,6 +49,7 @@ function snapshot(state) {
     state.lastMessagePreview,
     state.lastMessageFromMe,
     state.lastMessageId,
+    state.lastMessageParticipant,
   ].join("\u0001");
 }
 
@@ -181,6 +183,9 @@ function absorbMessage(state, message, { notify = false } = {}) {
       state.lastMessagePreview = text.slice(0, PREVIEW_LIMIT);
       state.lastMessageFromMe = fromMe;
       state.lastMessageId = id;
+      const participant = message.key.participant;
+      state.lastMessageParticipant =
+        typeof participant === "string" && participant ? participant : null;
     }
   }
 
@@ -226,6 +231,13 @@ function groupChatRows(userId, chats, now) {
       row.last_message_at = isoFromSeconds(chat.lastMessageAt);
       row.last_message_preview = chat.lastMessagePreview;
       row.last_message_from_me = Boolean(chat.lastMessageFromMe);
+      if (chat.lastMessageId) {
+        row.last_message_key = {
+          id: chat.lastMessageId,
+          fromMe: Boolean(chat.lastMessageFromMe),
+          participant: chat.lastMessageParticipant || null,
+        };
+      }
     }
     const key = Object.keys(row).sort().join("|");
     const list = groups.get(key);

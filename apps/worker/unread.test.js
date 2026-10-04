@@ -181,9 +181,15 @@ test("el guardado no pisa columnas que este chat no trajo", () => {
   const plain = groups.find((rows) => rows[0].wa_id.startsWith("b@"));
   assert.equal(detailed[0].unread_count, 1);
   assert.equal(detailed[0].last_message_preview, "hola");
+  assert.deepEqual(detailed[0].last_message_key, {
+    id: "m",
+    fromMe: false,
+    participant: null,
+  });
   assert.equal(detailed[0].unread_since, "2023-11-14T22:13:20.000Z");
   assert.equal("unread_count" in plain[0], false);
   assert.equal("last_message_preview" in plain[0], false);
+  assert.equal("last_message_key" in plain[0], false);
   assert.equal("archived" in detailed[0], false);
 });
 
