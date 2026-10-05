@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { RegisterPwa } from "@/components/register-pwa";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -59,6 +60,7 @@ export default function RootLayout({
       <body className="min-h-full bg-background text-foreground">
         <RegisterPwa />
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
