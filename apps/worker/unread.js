@@ -60,26 +60,26 @@ function applyReadSnapshot(state, update) {
     state.archivedKnown = true;
     state.archived = Boolean(update.archived);
   }
-  const count = update.unreadCount;
-  if (count == null && update.cursorSeconds == null && update.archived == null) {
-    return snapshot(state) !== before;
+  if (!Object.prototype.hasOwnProperty.call(update, "unreadCount")) {
+    const changed = snapshot(state) !== before;
+    if (changed) state.dirty = true;
+    return changed;
   }
+  const count = update.unreadCount;
   if (typeof count === "number" && count < 0) {
     state.unreadKnown = true;
     state.markedUnread = true;
-  } else if (count === 0 || (count == null && update.cursorSeconds !== undefined)) {
+  } else if (count == null || count === 0) {
     const cursor = update.cursorSeconds;
     const newerIncoming =
+      typeof cursor === "number" &&
       state.lastMessageFromMe === false &&
-      state.lastMessageAt &&
-      cursor != null &&
+      state.lastMessageAt != null &&
       state.lastMessageAt > cursor;
-    if (!newerIncoming) {
-      state.unreadKnown = true;
-      state.unreadCount = 0;
-      state.markedUnread = false;
-      state.unreadSince = null;
-    }
+    state.unreadKnown = true;
+    state.markedUnread = false;
+    state.unreadCount = newerIncoming ? 1 : 0;
+    state.unreadSince = newerIncoming ? state.lastMessageAt : null;
   } else if (typeof count === "number") {
     state.unreadKnown = true;
     state.unreadCount = count;
@@ -176,6 +176,12 @@ function absorbChat(previous, chat, isGroup) {
 
   const hasCount = chat.unreadCount != null && chat.unreadCount !== "";
   const hasMarked = chat.markedAsUnread != null;
+  if (chat.unreadCount === null) {
+    state.unreadKnown = true;
+    state.unreadCount = 0;
+    state.unreadSince = null;
+    if (!hasMarked) state.markedUnread = false;
+  }
   if (hasCount || hasMarked) {
     state.unreadKnown = true;
     if (hasCount) {

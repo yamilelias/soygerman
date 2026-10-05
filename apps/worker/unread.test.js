@@ -282,10 +282,10 @@ test("responder en vivo marca la conversación como leída", () => {
   assert.equal(opened.state.lastMessagePreview, "ya quedó");
 });
 
-test("una marca de leído no tapa un mensaje más nuevo", () => {
+test("un null quita el conteo viejo y solo deja el mensaje más nuevo", () => {
   const { state } = absorbChat(
     null,
-    { id: "521@s.whatsapp.net", name: "Ana", unreadCount: 1 },
+    { id: "521@s.whatsapp.net", name: "Ana", unreadCount: 61 },
     false,
   );
   absorbMessage(state, {
@@ -295,8 +295,9 @@ test("una marca de leído no tapa un mensaje más nuevo", () => {
     message: { conversation: "¿sigues?" },
   });
   const kept = applyReadSnapshot(state, { unreadCount: null, cursorSeconds: 1_700_000_100 });
-  assert.equal(kept, false);
+  assert.equal(kept, true);
   assert.equal(state.unreadCount, 1);
+  assert.equal(state.markedUnread, false);
 
   const cleared = applyReadSnapshot(state, {
     unreadCount: null,
@@ -305,6 +306,23 @@ test("una marca de leído no tapa un mensaje más nuevo", () => {
   assert.equal(cleared, true);
   assert.equal(state.unreadCount, 0);
   assert.equal(state.markedUnread, false);
+});
+
+test("un null sin cursor quita la marca de no leído", () => {
+  const first = absorbChat(
+    null,
+    { id: "521@s.whatsapp.net", name: "Ana", unreadCount: 61 },
+    false,
+  );
+  const cleared = applyReadSnapshot(first.state, { unreadCount: null });
+  assert.equal(cleared, true);
+  assert.equal(first.state.unreadCount, 0);
+  assert.equal(first.state.markedUnread, false);
+  assert.equal(first.state.unreadSince, null);
+
+  const again = absorbChat(first.state, { id: first.state.waId, unreadCount: null }, false);
+  assert.equal(again.state.unreadCount, 0);
+  assert.equal(again.state.markedUnread, false);
 });
 
 test("el cursor sale del rango que WhatsApp manda al marcar leído", () => {

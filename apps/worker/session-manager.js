@@ -868,7 +868,9 @@ class SessionManager {
     }
     const sock = entry.sock;
     this.stopUnreadFlush(entry);
+    await this.seedOpenUnread(userId, entry.chats);
     const originalEmit = sock.ev.emit.bind(sock.ev);
+    const reads = new Map();
     let cleared = 0;
     sock.ev.emit = (event, payload) => {
       if (event === "chats.update" && Array.isArray(payload)) {
@@ -877,7 +879,15 @@ class SessionManager {
           const state = entry.chats.get(item.id);
           if (!state) continue;
           const cursorSeconds = cursorFromConditional(item.conditional, item.id);
-          if (applyReadSnapshot(state, { ...item, cursorSeconds })) cleared += 1;
+          const patch = { cursorSeconds };
+          if (Object.prototype.hasOwnProperty.call(item, "unreadCount")) {
+            patch.unreadCount = item.unreadCount;
+          }
+          if (item.archived != null) patch.archived = item.archived;
+          if (applyReadSnapshot(state, patch)) cleared += 1;
+          if (Object.prototype.hasOwnProperty.call(patch, "unreadCount")) {
+            reads.set(item.id, patch);
+          }
         }
       }
       return originalEmit(event, payload);
@@ -896,12 +906,42 @@ class SessionManager {
     } finally {
       sock.ev.emit = originalEmit;
     }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    for (const [id, patch] of reads) {
+      const state = entry.chats.get(id);
+      if (state && applyReadSnapshot(state, patch)) cleared += 1;
+    }
     cleared += clearRepliedChats(entry.chats);
     this.stopUnreadFlush(entry);
     await this.flushUnread(userId);
     log("sync", `${userId} no leídos revisados, cambios ${cleared}`);
     if (failed) throw failed;
     return { refreshed: true, cleared };
+  }
+
+  async seedOpenUnread(userId, chats) {
+    const { data, error } = await this.supabase
+      .from("chats")
+      .select("wa_id, name, is_group, unread_count, marked_unread")
+      .eq("user_id", userId)
+      .or("unread_count.gt.0,marked_unread.eq.true")
+      .limit(1000);
+    if (error) {
+      log("sync", `${userId} no cargó no leídos: ${error.message}`);
+      return;
+    }
+    for (const row of data || []) {
+      if (!row?.wa_id || chats.has(row.wa_id)) continue;
+      rememberChat(chats, {
+        id: row.wa_id,
+        name: row.name,
+        isGroup: row.is_group,
+        unreadCount: row.unread_count,
+        markedAsUnread: row.marked_unread,
+      });
+      const state = chats.get(row.wa_id);
+      if (state) state.dirty = false;
+    }
   }
 
   async flushUnread(userId) {
