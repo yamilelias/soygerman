@@ -1,6 +1,13 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { absorbChat, absorbMessage, groupChatRows } = require("./unread");
+const {
+  absorbChat,
+  absorbMessage,
+  applyReadSnapshot,
+  clearRepliedChats,
+  cursorFromConditional,
+  groupChatRows,
+} = require("./unread");
 
 test("un chat sin datos de lectura no borra el no leído que ya teníamos", () => {
   const first = absorbChat(
@@ -273,4 +280,54 @@ test("responder en vivo marca la conversación como leída", () => {
   assert.equal(opened.state.unreadCount, 0);
   assert.equal(opened.state.markedUnread, false);
   assert.equal(opened.state.lastMessagePreview, "ya quedó");
+});
+
+test("una marca de leído no tapa un mensaje más nuevo", () => {
+  const { state } = absorbChat(
+    null,
+    { id: "521@s.whatsapp.net", name: "Ana", unreadCount: 1 },
+    false,
+  );
+  absorbMessage(state, {
+    key: { fromMe: false, id: "new" },
+    messageTimestamp: 1_700_000_500,
+    status: 2,
+    message: { conversation: "¿sigues?" },
+  });
+  const kept = applyReadSnapshot(state, { unreadCount: null, cursorSeconds: 1_700_000_100 });
+  assert.equal(kept, false);
+  assert.equal(state.unreadCount, 1);
+
+  const cleared = applyReadSnapshot(state, {
+    unreadCount: null,
+    cursorSeconds: 1_700_000_500,
+  });
+  assert.equal(cleared, true);
+  assert.equal(state.unreadCount, 0);
+  assert.equal(state.markedUnread, false);
+});
+
+test("el cursor sale del rango que WhatsApp manda al marcar leído", () => {
+  const id = "521@s.whatsapp.net";
+  const cursor = 1_700_000_400;
+  const conditional = (data) => {
+    const chat = data.historySets.chats[id];
+    if (!chat) return;
+    return cursor >= Number(chat.lastMessageRecvTimestamp || 0);
+  };
+  assert.equal(cursorFromConditional(conditional, id), cursor);
+  const unconditional = () => true;
+  assert.equal(cursorFromConditional(unconditional, id), null);
+});
+
+test("una respuesta ya guardada deja de contarse como no leída", () => {
+  const { state } = absorbChat(
+    null,
+    { id: "521@s.whatsapp.net", name: "Ana", unreadCount: 2 },
+    false,
+  );
+  state.lastMessageFromMe = true;
+  const chats = new Map([[state.waId, state]]);
+  assert.equal(clearRepliedChats(chats), 1);
+  assert.equal(state.unreadCount, 0);
 });

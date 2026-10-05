@@ -53,6 +53,96 @@ function snapshot(state) {
   ].join("\u0001");
 }
 
+function applyReadSnapshot(state, update) {
+  if (!state || !update) return false;
+  const before = snapshot(state);
+  if (update.archived != null) {
+    state.archivedKnown = true;
+    state.archived = Boolean(update.archived);
+  }
+  const count = update.unreadCount;
+  if (count == null && update.cursorSeconds == null && update.archived == null) {
+    return snapshot(state) !== before;
+  }
+  if (typeof count === "number" && count < 0) {
+    state.unreadKnown = true;
+    state.markedUnread = true;
+  } else if (count === 0 || (count == null && update.cursorSeconds !== undefined)) {
+    const cursor = update.cursorSeconds;
+    const newerIncoming =
+      state.lastMessageFromMe === false &&
+      state.lastMessageAt &&
+      cursor != null &&
+      state.lastMessageAt > cursor;
+    if (!newerIncoming) {
+      state.unreadKnown = true;
+      state.unreadCount = 0;
+      state.markedUnread = false;
+      state.unreadSince = null;
+    }
+  } else if (typeof count === "number") {
+    state.unreadKnown = true;
+    state.unreadCount = count;
+    if (count === 0) state.markedUnread = false;
+  }
+  const changed = snapshot(state) !== before;
+  if (changed) state.dirty = true;
+  return changed;
+}
+
+function cursorFromConditional(conditional, id) {
+  if (typeof conditional !== "function" || !id) return null;
+  const probe = (ts) =>
+    conditional({
+      historySets: { chats: { [id]: { lastMessageRecvTimestamp: ts } } },
+      chatUpserts: {},
+    });
+  let atZero;
+  try {
+    atZero = probe(0);
+  } catch {
+    return undefined;
+  }
+  if (atZero == null) return undefined;
+  let atFuture;
+  try {
+    atFuture = probe(4_000_000_000);
+  } catch {
+    return undefined;
+  }
+  if (atZero === true && atFuture === true) return null;
+  if (atZero !== true) return 0;
+  let lo = 0;
+  let hi = 4_000_000_000;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    let ok = false;
+    try {
+      ok = probe(mid) === true;
+    } catch {
+      ok = false;
+    }
+    if (ok) lo = mid;
+    else hi = mid - 1;
+  }
+  if (lo > 1e12) return Math.floor(lo / 1000);
+  return lo;
+}
+
+function clearRepliedChats(chats) {
+  let changed = 0;
+  for (const state of chats.values()) {
+    if (!state.lastMessageFromMe || state.markedUnread) continue;
+    if (state.unreadCount === 0 && state.unreadSince == null) continue;
+    state.unreadKnown = true;
+    state.unreadCount = 0;
+    state.unreadSince = null;
+    state.dirty = true;
+    changed += 1;
+  }
+  return changed;
+}
+
 function reconcileUnread(state) {
   const unread = state.unreadCount > 0;
   if (state.unreadKnown && !unread && !state.markedUnread) {
@@ -262,6 +352,9 @@ function groupChatRows(userId, chats, now) {
 module.exports = {
   absorbChat,
   absorbMessage,
+  applyReadSnapshot,
+  clearRepliedChats,
+  cursorFromConditional,
   groupChatRows,
   unixSeconds,
   messagePreview,

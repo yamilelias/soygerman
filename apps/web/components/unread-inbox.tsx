@@ -11,6 +11,7 @@ import type { Chat } from "@/lib/types";
 const REFRESH_KEY = "soygerman-unread-refresh";
 const REFRESH_WINDOW_MS = 15000;
 let refreshedAt = 0;
+let refreshInFlight = null;
 
 function recentlyRefreshed() {
   const now = Date.now();
@@ -36,6 +37,15 @@ function markRefreshed() {
   }
 }
 
+function forgetRefresh() {
+  refreshedAt = 0;
+  try {
+    window.sessionStorage.removeItem(REFRESH_KEY);
+  } catch {
+    return;
+  }
+}
+
 export function UnreadInbox({
   chats,
   total,
@@ -47,13 +57,21 @@ export function UnreadInbox({
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (recentlyRefreshed()) return;
-    markRefreshed();
+    if (recentlyRefreshed() || refreshInFlight) return;
     setRefreshing(true);
-    refreshUnread().finally(() => {
-      setRefreshing(false);
-      router.refresh();
-    });
+    refreshInFlight = refreshUnread()
+      .then((result) => {
+        if (result && "error" in result) {
+          forgetRefresh();
+          return;
+        }
+        markRefreshed();
+        router.refresh();
+      })
+      .finally(() => {
+        refreshInFlight = null;
+        setRefreshing(false);
+      });
   }, [router]);
 
   return (

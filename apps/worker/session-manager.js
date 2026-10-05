@@ -4,7 +4,7 @@ const pino = require("pino");
 const qrcode = require("qrcode");
 const { log } = require("./log");
 const { credsAreRegistered, persistCreds, readStoredCreds, deleteCreds } = require("./auth-store");
-const { absorbChat, absorbMessage, groupChatRows, messagePreview } = require("./unread");
+const { absorbChat, absorbMessage, applyReadSnapshot, clearRepliedChats, cursorFromConditional, groupChatRows, messagePreview } = require("./unread");
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -866,11 +866,42 @@ class SessionManager {
     if (!entry || entry.closing || entry.status !== "ready") {
       return { refreshed: false };
     }
+    const sock = entry.sock;
     this.stopUnreadFlush(entry);
-    await entry.sock.resyncAppState(["regular_low"], false);
+    const originalEmit = sock.ev.emit.bind(sock.ev);
+    let cleared = 0;
+    sock.ev.emit = (event, payload) => {
+      if (event === "chats.update" && Array.isArray(payload)) {
+        for (const item of payload) {
+          if (!item?.id) continue;
+          const state = entry.chats.get(item.id);
+          if (!state) continue;
+          const cursorSeconds = cursorFromConditional(item.conditional, item.id);
+          if (applyReadSnapshot(state, { ...item, cursorSeconds })) cleared += 1;
+        }
+      }
+      return originalEmit(event, payload);
+    };
+    let failed = null;
+    try {
+      const versionFile = path.join(
+        sessionDir(userId),
+        "app-state-sync-version-regular_low.json",
+      );
+      fs.rmSync(versionFile, { force: true });
+      await sock.resyncAppState(["regular_low"], true);
+    } catch (error) {
+      failed = error;
+      log("sync", `${userId} no releyó no leídos: ${error.message || error}`);
+    } finally {
+      sock.ev.emit = originalEmit;
+    }
+    cleared += clearRepliedChats(entry.chats);
     this.stopUnreadFlush(entry);
     await this.flushUnread(userId);
-    return { refreshed: true };
+    log("sync", `${userId} no leídos revisados, cambios ${cleared}`);
+    if (failed) throw failed;
+    return { refreshed: true, cleared };
   }
 
   async flushUnread(userId) {

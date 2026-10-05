@@ -76,7 +76,7 @@ export async function syncChats() {
 }
 
 export async function refreshUnread() {
-  const result = await callWorker("/refresh-unread", 25000);
+  const result = await callWorker("/refresh-unread", 45000);
   if ("ok" in result) revalidatePath("/dashboard");
   return result;
 }
