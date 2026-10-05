@@ -11,7 +11,7 @@ import type { Chat } from "@/lib/types";
 const REFRESH_KEY = "soygerman-unread-refresh";
 const REFRESH_WINDOW_MS = 15000;
 let refreshedAt = 0;
-let refreshInFlight = null;
+let refreshInFlight: Promise<void> | null = null;
 
 function recentlyRefreshed() {
   const now = Date.now();
