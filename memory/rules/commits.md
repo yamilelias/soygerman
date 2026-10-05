@@ -8,4 +8,5 @@ Un solo tema: cómo queda el historial.
 - No metas archivos que ya estaban modificados y no son de esta tarea.
 - El mensaje va en español y dice por qué, en una o dos frases.
 - El commit es local. El push espera un pedido explícito.
+- Antes de publicar, compila la aplicación que toca el cambio. En la web es `npm run build` dentro de `apps/web`. Si no compila, no se manda.
 - No uses `--no-verify`, no reescribas historia ya publicada y no hagas force push.
