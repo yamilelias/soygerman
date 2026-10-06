@@ -3,12 +3,12 @@
   "name": "SoyGerman",
   "short_name": "SoyGerman",
   "description": "Agenda y envía mensajes de WhatsApp",
-  "start_url": "/",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#111111",
-  "theme_color": "#111111",
+  "background_color": "#FFFFFF",
+  "theme_color": "#7A0505",
   "lang": "es",
   "icons": [
     {

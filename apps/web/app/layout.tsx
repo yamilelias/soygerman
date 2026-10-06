@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans } from "next/font/google";
+import { DM_Sans, Montserrat } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { RegisterPwa } from "@/components/register-pwa";
 import { Providers } from "./providers";
@@ -8,6 +8,12 @@ import "./globals.css";
 const dmSans = DM_Sans({
   subsets: ["latin"],
   variable: "--font-dm-sans",
+});
+
+const montserrat = Montserrat({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-montserrat",
 });
 
 export const metadata: Metadata = {
@@ -33,7 +39,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#111111",
+  themeColor: "#7A0505",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -47,7 +53,7 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${dmSans.variable} dark h-full antialiased`}
+      className={`${dmSans.variable} ${montserrat.variable} dark h-full antialiased`}
     >
       <head>
         <script

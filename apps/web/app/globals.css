@@ -14,7 +14,7 @@
 [data-theme='light'],
 [data-theme='default'] {
   /* Theme Colors (Light Mode) */
-  --accent: oklch(36.77% 0.1467 28.61);
+  --accent: oklch(36.68% 0.1463 28.62);
   --accent-foreground: oklch(99.11% 0 0);
   --background: oklch(97.02% 0.02 28.61);
   --border: oklch(90% 0.02 28.61);
@@ -26,7 +26,7 @@
   --field-border: transparent;
   --field-foreground: oklch(21.03% 0.02 28.61);
   --field-placeholder: oklch(55.17% 0.04 28.61);
-  --focus: oklch(36.77% 0.1467 28.61);
+  --focus: oklch(36.68% 0.1463 28.62);
   --foreground: oklch(21.03% 0.02 28.61);
   --muted: oklch(55.17% 0.04 28.61);
   --overlay: oklch(100% 0.006 28.61);
@@ -59,7 +59,7 @@
 [data-theme='dark'] {
   color-scheme: dark;
   /* Theme Colors (Dark Mode) */
-  --accent: oklch(36.77% 0.1467 28.61);
+  --accent: oklch(36.68% 0.1463 28.62);
   --accent-foreground: oklch(99.11% 0 0);
   --background: oklch(12% 0.02 28.61);
   --border: oklch(28% 0.02 28.61);
@@ -71,7 +71,7 @@
   --field-border: transparent;
   --field-foreground: oklch(99.11% 0.02 28.61);
   --field-placeholder: oklch(70.5% 0.04 28.61);
-  --focus: oklch(36.77% 0.1467 28.61);
+  --focus: oklch(36.68% 0.1463 28.62);
   --foreground: oklch(99.11% 0.02 28.61);
   --muted: oklch(70.5% 0.04 28.61);
   --overlay: oklch(21.03% 0.04 28.61);
@@ -90,4 +90,8 @@
   --surface-tertiary-foreground: oklch(99.11% 0.02 28.61);
   --warning: oklch(82.03% 0.1444 49.31);
   --warning-foreground: oklch(21.03% 0.0059 49.31);
+}
+
+.font-display {
+  font-family: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
 }

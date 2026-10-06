@@ -8,6 +8,7 @@ const withPWA = withPWAInit({
   cacheOnFrontEndNav: true,
   reloadOnOnline: true,
   dynamicStartUrl: true,
+  // /dashboard manda a /login si no hay sesión. El SW guarda ese destino.
   dynamicStartUrlRedirect: "/login",
 });
 
