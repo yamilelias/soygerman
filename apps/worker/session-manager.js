@@ -256,7 +256,8 @@ class SessionManager {
     return this.clients.get(userId)?.status === "ready";
   }
 
-  async recentTexts(userId, chat) {
+  async recentMessages(userId, chat, limit = 20) {
+    const count = Math.min(Math.max(Number(limit) || 20, 1), 30);
     const key = chat?.last_message_key;
     const sock = this.getClient(userId);
     if (!key?.id || !chat?.last_message_at || !sock?.fetchMessageHistory) return [];
@@ -273,11 +274,8 @@ class SessionManager {
         const at = Number(message.messageTimestamp) || 0;
         const fromMe = Boolean(message.key.fromMe);
         const sender =
-          !fromMe && message.pushName ? `${String(message.pushName).trim()}: ` : "";
-        collected.push({
-          at,
-          text: `${fromMe ? "Tú: " : sender}${preview}`,
-        });
+          !fromMe && message.pushName ? String(message.pushName).trim() : "";
+        collected.push({ at, fromMe, sender, text: preview });
       }
     };
     sock.ev.on("messaging-history.set", onHistory);
@@ -285,7 +283,7 @@ class SessionManager {
       const timestampMs = new Date(chat.last_message_at).getTime();
       if (!Number.isFinite(timestampMs)) return [];
       await sock.fetchMessageHistory(
-        5,
+        count,
         {
           remoteJid,
           id: key.id,
@@ -294,16 +292,31 @@ class SessionManager {
         },
         timestampMs,
       );
-      await waitForCount(collected, 5, 8000);
+      await waitForCount(collected, count, 8000);
     } catch (error) {
-      log("resumen", `${userId} no pidió contexto: ${error.message || error}`);
+      log("mensajes", `${userId} no pidió el hilo: ${error.message || error}`);
       return [];
     } finally {
       sock.ev.off("messaging-history.set", onHistory);
     }
     collected.sort((left, right) => left.at - right.at);
-    const texts = collected.map((item) => item.text);
-    return texts.length > 5 ? texts.slice(-5) : texts;
+    const seen = new Set();
+    const unique = [];
+    for (const item of collected) {
+      const stamp = `${item.at}\u0001${item.fromMe}\u0001${item.text}`;
+      if (seen.has(stamp)) continue;
+      seen.add(stamp);
+      unique.push(item);
+    }
+    return unique.length > count ? unique.slice(-count) : unique;
+  }
+
+  async recentTexts(userId, chat) {
+    const messages = await this.recentMessages(userId, chat, 5);
+    return messages.map((item) => {
+      const sender = !item.fromMe && item.sender ? `${item.sender}: ` : "";
+      return `${item.fromMe ? "Tú: " : sender}${item.text}`;
+    });
   }
 
   async upsertSession(userId, fields) {

@@ -1,9 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import type { ChatPreviewMessage } from "@/lib/types";
 import { createClient } from "@/utils/supabase/server";
 
-async function callWorker(path: string, timeoutMs?: number) {
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function callWorker<T extends Record<string, unknown> = Record<string, never>>(
+  path: string,
+  timeoutMs?: number,
+  payload?: unknown,
+) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -33,10 +41,11 @@ async function callWorker(path: string, timeoutMs?: number) {
         "x-worker-secret": secret,
         Authorization: `Bearer ${session.access_token}`,
       },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
       cache: "no-store",
       signal: timeoutMs ? AbortSignal.timeout(timeoutMs) : undefined,
     });
-    const body = (await response.json().catch(() => ({}))) as {
+    const body = (await response.json().catch(() => ({}))) as T & {
       error?: string;
     };
     if (!response.ok) {
@@ -46,7 +55,7 @@ async function callWorker(path: string, timeoutMs?: number) {
       return { error: body.error || "Error del worker" };
     }
     console.info(`[worker] POST ${url} ${response.status}`);
-    return { ok: true as const };
+    return { ok: true as const, ...body };
   } catch (error) {
     const message = error instanceof Error ? error.message : "error de red";
     console.error(`[worker] POST ${url} no respondió: ${message}`);
@@ -79,4 +88,19 @@ export async function refreshUnread() {
   const result = await callWorker("/refresh-unread", 45000);
   if ("ok" in result) revalidatePath("/dashboard");
   return result;
+}
+
+export async function loadChatPreview(chatId: string) {
+  if (!UUID_PATTERN.test(chatId)) return { error: "Chat no válido" };
+  const result = await callWorker<{ messages?: ChatPreviewMessage[] }>(
+    "/chats/messages",
+    20000,
+    { chatId },
+  );
+  if (!("ok" in result)) {
+    return { error: result.error ?? "Error del worker" };
+  }
+  return {
+    messages: Array.isArray(result.messages) ? result.messages : [],
+  };
 }

@@ -21,6 +21,7 @@ const desktopLinks = [
 ];
 
 const mobileLinks = [
+  { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
   { href: "/chats", label: "Chats", icon: MessagesSquare },
   { href: "/schedule", label: "Agendar", icon: CalendarPlus },
   { href: "/settings", label: "Configuración", icon: Settings },
@@ -90,7 +91,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={link.href}
               href={link.href}
-              className={`flex flex-1 flex-col items-center gap-1 py-2 text-[11px] ${
+              className={`flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2 text-center text-[11px] leading-tight ${
                 active ? "text-foreground" : "text-muted"
               }`}
             >

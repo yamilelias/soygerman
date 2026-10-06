@@ -24,6 +24,7 @@ function mexicoDate(now = new Date()) {
 
 function isOpenUnread(chat) {
   if (!chat || chat.hidden || chat.archived) return false;
+  if (chat.inbox_visible === false) return false;
   return (chat.unread_count || 0) > 0 || chat.marked_unread === true;
 }
 
@@ -232,9 +233,7 @@ async function loadUnread(supabase, userId) {
     .from("chats")
     .select(CHAT_COLUMNS, { count: "exact" })
     .eq("user_id", userId)
-    .eq("hidden", false)
-    .eq("archived", false)
-    .or("unread_count.gt.0,marked_unread.eq.true")
+    .eq("inbox_visible", true)
     .order("unread_since", { ascending: true, nullsFirst: false })
     .order("last_message_at", { ascending: false, nullsFirst: false })
     .limit(MAX_CHATS);

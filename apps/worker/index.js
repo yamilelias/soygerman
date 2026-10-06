@@ -104,6 +104,53 @@ app.post("/sync-chats", authenticate, async (req, res, next) => {
   }
 });
 
+const CHAT_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function messageTime(at) {
+  if (!at) return null;
+  const date = new Date(at > 1e12 ? at : at * 1000);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+app.post("/chats/messages", authenticate, async (req, res, next) => {
+  try {
+    const chatId = req.body?.chatId;
+    if (typeof chatId !== "string" || !CHAT_ID_PATTERN.test(chatId)) {
+      res.status(400).json({ error: "Chat no válido" });
+      return;
+    }
+    if (!sessions.isReady(req.userId)) {
+      res.status(409).json({ error: "WhatsApp no está conectado" });
+      return;
+    }
+    const { data, error } = await supabase
+      .from("chats")
+      .select(
+        "id, wa_id, name, last_message_at, last_message_key, last_message_preview",
+      )
+      .eq("id", chatId)
+      .eq("user_id", req.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) {
+      res.status(404).json({ error: "No se encontró el chat" });
+      return;
+    }
+    const messages = (await sessions.recentMessages(req.userId, data, 20)).map(
+      (item) => ({
+        at: messageTime(item.at),
+        fromMe: item.fromMe,
+        sender: item.sender,
+        text: item.text,
+      }),
+    );
+    res.json({ messages });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((error, _req, res, _next) => {
   log("http", `error ${error.message || error}`);
   res.status(500).json({ error: error.message || "Error interno" });

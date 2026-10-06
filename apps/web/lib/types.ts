@@ -57,6 +57,13 @@ export type DailyDigest = {
   updated_at: string;
 };
 
+export type ChatPreviewMessage = {
+  at: string | null;
+  fromMe: boolean;
+  sender: string;
+  text: string;
+};
+
 export type ScheduledMessage = {
   id: string;
   user_id: string;

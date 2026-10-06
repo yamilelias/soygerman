@@ -29,6 +29,16 @@ test("un chat leído, archivado u oculto no entra al resumen", () => {
     isOpenUnread({ unread_count: 0, marked_unread: false, archived: false, hidden: false }),
     false,
   );
+  assert.equal(
+    isOpenUnread({
+      unread_count: 3,
+      marked_unread: false,
+      archived: false,
+      hidden: false,
+      inbox_visible: false,
+    }),
+    false,
+  );
 });
 
 test("el prompt lleva el último texto y no pide el hilo de entrada", () => {
