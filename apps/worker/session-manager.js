@@ -216,7 +216,7 @@ function historyMessage(item) {
   return null;
 }
 
-function rememberChat(chats, chat) {
+function rememberChat(chats, chat, options) {
   if (!chat?.id) return false;
   const isGroup = classifyChat(
     chat.id,
@@ -227,6 +227,7 @@ function rememberChat(chats, chat) {
     chats.get(chat.id),
     { ...chat, name: chatName(chat) },
     isGroup,
+    options,
   );
   chats.set(chat.id, state);
   let dirty = changed;
@@ -458,11 +459,11 @@ class SessionManager {
         });
     });
 
-    const take = (items) => {
+    const take = (items, options) => {
       if (!still() || !Array.isArray(items)) return false;
       let changed = false;
       for (const item of items) {
-        if (rememberChat(entry.chats, item)) changed = true;
+        if (rememberChat(entry.chats, item, options)) changed = true;
       }
       return changed;
     };
@@ -481,7 +482,7 @@ class SessionManager {
       return changed;
     };
     sock.ev.on("messaging-history.set", ({ chats, contacts, messages }) => {
-      const changed = take(chats) || take(contacts) || noteMessages(messages);
+      const changed = take(chats, { keepUnread: true }) || take(contacts) || noteMessages(messages);
       if (!still()) return;
       log("sync", `${userId} historial parcial chats=${entry.chats.size}`);
       this.scheduleAutoSync(userId);
@@ -844,9 +845,9 @@ class SessionManager {
     }, 4000);
   }
 
-  async upsertChatRows(userId, chats) {
+  async upsertChatRows(userId, chats, options) {
     const now = new Date().toISOString();
-    const groups = groupChatRows(userId, chats, now);
+    const groups = groupChatRows(userId, chats, now, options);
     for (const rows of groups) {
       for (let index = 0; index < rows.length; index += 200) {
         const chunk = rows.slice(index, index + 200);
@@ -1033,7 +1034,7 @@ class SessionManager {
     const chats = [...entry.chats.values()];
     for (const chat of chats) chat.dirty = false;
     // No incluir `hidden`: el upsert no debe devolver un chat que la persona quitó.
-    await this.upsertChatRows(userId, chats);
+    await this.upsertChatRows(userId, chats, { includeUnread: false });
     if ([...entry.chats.values()].some((chat) => chat.dirty)) {
       this.scheduleUnreadFlush(userId);
     }

@@ -338,6 +338,27 @@ test("el cursor sale del rango que WhatsApp manda al marcar leído", () => {
   assert.equal(cursorFromConditional(unconditional, id), null);
 });
 
+test("el historial no vuelve a escribir un conteo viejo", () => {
+  const { state } = absorbChat(
+    null,
+    { id: "521@s.whatsapp.net", name: "Ana", unreadCount: 0 },
+    false,
+  );
+  const history = absorbChat(
+    state,
+    { id: state.waId, name: "Ana", unreadCount: 31 },
+    false,
+    { keepUnread: true },
+  );
+  assert.equal(history.state.unreadCount, 0);
+  assert.equal(history.state.unreadKnown, true);
+
+  const rows = groupChatRows("user", [history.state], "2026-10-06T00:00:00.000Z", {
+    includeUnread: false,
+  });
+  assert.equal(rows[0][0].unread_count, undefined);
+});
+
 test("una respuesta ya guardada deja de contarse como no leída", () => {
   const { state } = absorbChat(
     null,

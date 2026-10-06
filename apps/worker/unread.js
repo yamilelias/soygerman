@@ -163,7 +163,7 @@ function reconcileUnread(state) {
   }
 }
 
-function absorbChat(previous, chat, isGroup) {
+function absorbChat(previous, chat, isGroup, options = {}) {
   const state = previous ?? blankChat(chat.id, isGroup);
   const before = snapshot(state);
   state.waId = chat.id;
@@ -174,15 +174,16 @@ function absorbChat(previous, chat, isGroup) {
   if (name) state.name = name;
   else if (!state.name) state.name = chat.id;
 
+  const keepUnread = options.keepUnread === true;
   const hasCount = chat.unreadCount != null && chat.unreadCount !== "";
   const hasMarked = chat.markedAsUnread != null;
-  if (chat.unreadCount === null) {
+  if (!keepUnread && chat.unreadCount === null) {
     state.unreadKnown = true;
     state.unreadCount = 0;
     state.unreadSince = null;
     if (!hasMarked) state.markedUnread = false;
   }
-  if (hasCount || hasMarked) {
+  if (!keepUnread && (hasCount || hasMarked)) {
     state.unreadKnown = true;
     if (hasCount) {
       const count = Math.trunc(Number(chat.unreadCount));
@@ -317,7 +318,7 @@ function isoFromSeconds(seconds) {
   return new Date(seconds * 1000).toISOString();
 }
 
-function groupChatRows(userId, chats, now) {
+function groupChatRows(userId, chats, now, options = {}) {
   const groups = new Map();
   for (const chat of chats) {
     const row = {
@@ -327,7 +328,7 @@ function groupChatRows(userId, chats, now) {
       is_group: Boolean(chat.isGroup),
       updated_at: now,
     };
-    if (chat.unreadKnown) {
+    if (options.includeUnread !== false && chat.unreadKnown) {
       const count = chat.unreadCount || 0;
       row.unread_count = count;
       row.marked_unread = Boolean(chat.markedUnread);
