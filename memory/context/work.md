@@ -4,7 +4,7 @@ PWA para agendar mensajes de WhatsApp. Un worker con sesión persistente los env
 
 ## Piezas
 
-- `apps/web`: Next.js 16.3.6, React 19, Tailwind 4, HeroUI 3.2.6, Supabase (`@supabase/ssr`), PWA con `@ducanh2912/next-pwa`. El manifiesto abre en `/`, trae iconos de 192 y 512, y en producción se registra `/sw.js`. En el iPhone hace falta la meta `apple-mobile-web-app-capable` para añadirlo a la pantalla de inicio.
+- `apps/web`: Next.js 16.3.6, React 19, Tailwind 4, HeroUI 3.2.6, Supabase (`@supabase/ssr`), PWA con `@ducanh2912/next-pwa`. El manifiesto abre en `/dashboard`, trae iconos de 192 y 512, y en producción se registra `/sw.js`. En el iPhone hace falta la meta `apple-mobile-web-app-capable` para añadirlo a la pantalla de inicio.
 - `apps/worker`: Express, Baileys 7.0.0-rc14, `node-cron`, cliente de Supabase con service role.
 - `supabase/migrations/20260928120000_init.sql`: esquema aplicado en el proyecto remoto.
 
@@ -31,7 +31,7 @@ RLS: cada quien lee y escribe lo suyo. En mensajes agendados solo puede insertar
 
 Magic link con PKCE. El formulario llama `signInWithOtp` con `shouldCreateUser: false` y el redirect es `{origen}/auth/callback`. Esa ruta cambia el `code` por sesión. Un correo nuevo no crea cuenta: el alta es la invitación desde el panel de Supabase.
 
-Rutas protegidas: `/dashboard`, `/chats`, `/schedule`, `/pending`, `/history`, `/settings`. Sin sesión vuelven a `/login`. Si no hay chats visibles ni mensajes, esas rutas muestran solo el cuadro para conectar WhatsApp. El menú de escritorio es Inicio, Chats, Agendar y Configuración, en una columna de `100vh`. En el teléfono el pie es Chats, Agendar y Configuración; el logo abre el inicio. Agendar, Pendientes e Historial comparten la vista de mensajes y cada una conserva su URL. Al abrir Agendar, la fecha queda en el día siguiente a la hora en que se abrió la vista. Configuración tiene la cuenta en solo lectura, el tema y la vinculación de WhatsApp. El inicio abre con Para hoy: el resumen de esa fecha, o el aviso de que sale a las 6:00 si aún no hay fila. Después lista las conversaciones sin leer y las marcadas como no leídas, con el último texto y un enlace a Agendar (`/schedule?chat=`). Abajo siguen los pendientes, los enviados de la semana (lunes a domingo, hora de Ciudad de México) y los fallidos acumulados.
+`/` es la página pública, en español, con el logo y los colores de marca. No redirige. El botón de entrar va a `/dashboard` si hay sesión y a `/login` si no. Rutas protegidas: `/dashboard`, `/chats`, `/schedule`, `/pending`, `/history`, `/settings`. Sin sesión vuelven a `/login`. Si no hay chats visibles ni mensajes, esas rutas muestran solo el cuadro para conectar WhatsApp. El menú de escritorio es Inicio, Chats, Agendar y Configuración, en una columna de `100vh`. En el teléfono el pie es Chats, Agendar y Configuración; el logo abre el inicio. Agendar, Pendientes e Historial comparten la vista de mensajes y cada una conserva su URL. Al abrir Agendar, la fecha queda en el día siguiente a la hora en que se abrió la vista. Configuración tiene la cuenta en solo lectura, el tema y la vinculación de WhatsApp. El inicio abre con Para hoy: el resumen de esa fecha, o el aviso de que sale a las 6:00 si aún no hay fila. Después lista las conversaciones sin leer y las marcadas como no leídas, con el último texto y un enlace a Agendar (`/schedule?chat=`). Abajo siguen los pendientes, los enviados de la semana (lunes a domingo, hora de Ciudad de México) y los fallidos acumulados.
 
 ## Worker
 
