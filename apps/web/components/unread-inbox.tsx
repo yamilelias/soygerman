@@ -1,8 +1,7 @@
 "use client";
 
 import { Button, Modal } from "@heroui/react";
-import { Loader2 } from "lucide-react";
-import Link from "next/link";
+import { CalendarPlus, CircleMinus, Eye, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { dismissUnread } from "@/app/actions/chats";
@@ -148,7 +147,8 @@ export function UnreadInbox({
             return (
               <li
                 key={chat.id}
-                className="flex flex-col gap-3 rounded-lg border border-separator p-4 sm:flex-row sm:items-start sm:justify-between"
+                className="flex cursor-pointer flex-col gap-3 rounded-lg border border-separator p-4 transition-colors hover:bg-default sm:flex-row sm:items-start sm:justify-between"
+                onClick={() => openPreview(chat)}
               >
                 <div className="min-w-0">
                   <p className="font-medium">{chat.name}</p>
@@ -174,27 +174,37 @@ export function UnreadInbox({
                     </p>
                   )}
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <div
+                  className="flex shrink-0 items-center gap-1"
+                  onClick={(event) => event.stopPropagation()}
+                >
                   <Button
-                    size="sm"
-                    variant="secondary"
-                    onPress={() => openPreview(chat)}
-                  >
-                    Ver
-                  </Button>
-                  <Link
-                    href={`/schedule?chat=${chat.id}`}
-                    className="rounded-md border border-separator px-3 py-1.5 text-sm font-medium"
-                  >
-                    Agendar
-                  </Link>
-                  <Button
+                    isIconOnly
                     size="sm"
                     variant="ghost"
+                    aria-label={`Ver ${chat.name}`}
+                    onPress={() => openPreview(chat)}
+                  >
+                    <Eye size={16} />
+                  </Button>
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Agendar mensaje a ${chat.name}`}
+                    onPress={() => router.push(`/schedule?chat=${chat.id}`)}
+                  >
+                    <CalendarPlus size={16} />
+                  </Button>
+                  <Button
+                    isIconOnly
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Quitar ${chat.name} del inicio`}
                     isDisabled={busyId === chat.id}
                     onPress={() => dismiss(chat)}
                   >
-                    Quitar del inicio
+                    <CircleMinus size={16} />
                   </Button>
                 </div>
               </li>
