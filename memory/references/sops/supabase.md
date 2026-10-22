@@ -2,6 +2,8 @@
 
 Proyecto `nbwxmkcwzqqxvxxfqqpn`.
 
+En GitHub Actions, las migraciones usan el environment `Production`. `SUPABASE_DB_URL` debe contener la URL completa de Connect → Session pooler (puerto 5432) de este proyecto, con la contraseña de la base de datos codificada para URL. El workflow comprueba el proyecto en el usuario de la URL y pasa el secreto a `supabase db push --db-url`, porque la conexión directa necesita IPv6 y GitHub Actions no la tiene. `SUPABASE_ACCESS_TOKEN` y `SUPABASE_DB_PASSWORD` siguen sirviendo para `supabase link`.
+
 La migración `supabase/migrations/20260928120000_init.sql` ya está aplicada. Incluye el revoke de `handle_new_user()` para que anon y authenticated no la llamen por RPC.
 
 Auth por correo está activo. El formulario no crea usuarios. En Authentication → Providers → Email, «Allow new users to sign up» tiene que quedar apagado: si sigue prendido, alguien puede llamar la API y registrarse aunque la página no lo ofrezca. La invitación del panel sí crea la cuenta. El correo integrado solo entrega a miembros del equipo.
