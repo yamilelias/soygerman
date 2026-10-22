@@ -42,10 +42,6 @@ export function ChatExplorer({
   const to = Math.min(page * CHAT_PAGE_SIZE, total);
 
   useEffect(() => {
-    setText(query);
-  }, [query]);
-
-  useEffect(() => {
     if (text === query) return;
     const handle = setTimeout(() => {
       router.replace(chatsHref(text, kind, 1));

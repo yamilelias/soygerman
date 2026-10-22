@@ -142,6 +142,7 @@ export function WhatsAppConnection({ start = false, initialSession = null }: {
     if (session.status === "interrupted") {
       sawProgress.current = false;
       ignoreDisconnect.current = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Realtime status drives the pairing indicator.
       setLinking(false);
       if (previous !== "interrupted") setError(null);
       return;
@@ -188,6 +189,7 @@ export function WhatsAppConnection({ start = false, initialSession = null }: {
     if (loading || resumed.current || !session) return;
     if (!PAIRING_STATUSES.includes(session.status)) return;
     resumed.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Resume pairing after loading its persisted status.
     setLinking(true);
     startTransition(async () => {
       const result = await connectWhatsApp(initialSessionId);

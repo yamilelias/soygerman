@@ -26,7 +26,7 @@ export default async function ChatsPage({
 
   return (
     <ChatExplorer
-      key={line?.id}
+      key={`${line?.id}:${query}`}
       chats={chats}
       total={total}
       query={query}

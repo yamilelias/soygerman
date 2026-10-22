@@ -42,7 +42,10 @@ export function ScheduleForm({ selected }: { selected: Chat | null }) {
   const minimum = now(getLocalTimeZone());
 
   useEffect(() => {
-    setScheduledAt((current) => current ?? defaultWhen());
+    const handle = window.setTimeout(() => {
+      setScheduledAt((current) => current ?? defaultWhen());
+    }, 0);
+    return () => window.clearTimeout(handle);
   }, []);
 
   function onInputChange(value: string) {

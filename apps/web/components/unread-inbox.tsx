@@ -80,8 +80,11 @@ export function UnreadInbox({
 
   useEffect(() => {
     if (recentlyRefreshed(sessionId) || refreshInFlight.has(sessionId)) return;
-    setRefreshing(true);
-    const request = refreshUnread()
+    const request = Promise.resolve()
+      .then(() => {
+        setRefreshing(true);
+        return refreshUnread();
+      })
       .then((result) => {
         if (result && "error" in result) {
           forgetRefresh(sessionId);
