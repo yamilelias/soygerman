@@ -60,6 +60,15 @@ export function mexicoDateString(now = new Date()) {
   }).format(now);
 }
 
+export function currentDayInMexico(now = new Date()) {
+  const today = calendarInMexico(now);
+  const tomorrow = shiftCalendar(today.year, today.month, today.day, 1);
+  return {
+    start: mexicoMidnight(today.year, today.month, today.day),
+    end: mexicoMidnight(tomorrow.year, tomorrow.month, tomorrow.day),
+  };
+}
+
 export function currentWeekInMexico(now = new Date()) {
   const today = calendarInMexico(now);
   const monday = shiftCalendar(

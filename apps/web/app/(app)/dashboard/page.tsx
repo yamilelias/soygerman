@@ -2,7 +2,7 @@ import Link from "next/link";
 import { UnreadInbox } from "@/components/unread-inbox";
 import { formatDateTime } from "@/lib/format";
 import type { Chat, DailyDigest, ScheduledMessage } from "@/lib/types";
-import { currentWeekInMexico, formatWeekRange, mexicoDateString } from "@/lib/week";
+import { currentDayInMexico, currentWeekInMexico, formatWeekRange, mexicoDateString } from "@/lib/week";
 import { createClient } from "@/utils/supabase/server";
 
 const unreadColumns =
@@ -15,9 +15,10 @@ const messageColumns =
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  const today = currentDayInMexico();
   const week = currentWeekInMexico();
 
-  const [pendingResult, sentResult, failedResult, unreadResult, digestResult] =
+  const [pendingResult, sentResult, failedResult, unreadResult, digestResult, weekPending] =
     await Promise.all([
     supabase
       .from("scheduled_messages")
@@ -49,6 +50,7 @@ export default async function DashboardPage() {
       )
       .eq("digest_date", mexicoDateString())
       .maybeSingle(),
+    loadWeekPending(supabase, today.start, week.end),
   ]);
 
   if (unreadResult.error) throw new Error(unreadResult.error.message);
@@ -59,6 +61,9 @@ export default async function DashboardPage() {
     return { ...row, chats: chat ?? null } as ScheduledMessage;
   });
   const pendingCount = pendingResult.count ?? upcoming.length;
+  const todayPending = weekPending.filter(
+    (message) => new Date(message.scheduled_at) < today.end,
+  );
   const unread = (unreadResult.data ?? []) as Chat[];
   const unreadCount = unreadResult.count ?? unread.length;
   const digest = (digestResult.data ?? null) as DailyDigest | null;
@@ -80,6 +85,47 @@ export default async function DashboardPage() {
       <UnreadInbox chats={unread} total={unreadCount} />
 
       <div className="grid gap-3 sm:grid-cols-2">
+        <section className="rounded-lg border border-separator p-4">
+          <p className="text-sm text-muted">Por enviar hoy</p>
+          <p className="text-3xl font-semibold">{todayPending.length}</p>
+          {todayPending.length === 0 ? (
+            <p className="text-sm text-muted">No hay mensajes pendientes para hoy.</p>
+          ) : (
+            <ul className="mt-3 flex flex-col gap-2 text-sm">
+              {todayPending.map((message) => (
+                <li key={message.id} className="flex justify-between gap-3">
+                  <span>{message.chats?.name ?? "Chat eliminado"}</span>
+                  <span className="shrink-0 text-muted">
+                    {formatTime(message.scheduled_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+        <section className="rounded-lg border border-separator p-4">
+          <p className="text-sm text-muted">Por enviar esta semana</p>
+          <p className="text-3xl font-semibold">{weekPending.length}</p>
+          <p className="text-sm text-muted">
+            {formatWeekRange(week.start, week.end)}
+          </p>
+          {weekPending.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">
+              No hay mensajes pendientes para esta semana.
+            </p>
+          ) : (
+            <ul className="mt-3 flex flex-col gap-2 text-sm">
+              {weekPending.map((message) => (
+                <li key={message.id} className="flex justify-between gap-3">
+                  <span>{message.chats?.name ?? "Chat eliminado"}</span>
+                  <span className="shrink-0 text-muted">
+                    {formatMexicoDateTime(message.scheduled_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
         <section className="rounded-lg border border-separator p-4">
           <p className="text-sm text-muted">Enviados esta semana</p>
           <p className="text-3xl font-semibold">{sentResult.count ?? 0}</p>
@@ -130,6 +176,52 @@ export default async function DashboardPage() {
       </section>
     </div>
   );
+}
+
+async function loadWeekPending(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  start: Date,
+  end: Date,
+) {
+  const messages: ScheduledMessage[] = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await supabase
+      .from("scheduled_messages")
+      .select(messageColumns)
+      .eq("status", "pending")
+      .gte("scheduled_at", start.toISOString())
+      .lt("scheduled_at", end.toISOString())
+      .order("scheduled_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error(error.message);
+    messages.push(
+      ...(data ?? []).map((row) => {
+        const chat = Array.isArray(row.chats) ? row.chats[0] : row.chats;
+        return { ...row, chats: chat ?? null } as ScheduledMessage;
+      }),
+    );
+    if (!data || data.length < pageSize) break;
+  }
+  return messages;
+}
+
+function formatTime(iso: string) {
+  return new Intl.DateTimeFormat("es-MX", {
+    timeZone: "America/Mexico_City",
+    timeStyle: "short",
+  }).format(new Date(iso));
+}
+
+function formatMexicoDateTime(iso: string) {
+  return new Intl.DateTimeFormat("es-MX", {
+    timeZone: "America/Mexico_City",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
 }
 
 function TodayDigest({ digest }: { digest: DailyDigest | null }) {
