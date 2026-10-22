@@ -4,7 +4,7 @@ import { Button, Modal } from "@heroui/react";
 import { CalendarPlus, CircleMinus, Eye, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { dismissUnread } from "@/app/actions/chats";
+import { dismissUnread, listUnreadChats } from "@/app/actions/chats";
 import { loadChatPreview, refreshUnread } from "@/app/actions/worker";
 import { formatDateTime } from "@/lib/format";
 import type { Chat, ChatPreviewMessage } from "@/lib/types";
@@ -65,9 +65,16 @@ export function UnreadInbox({
   >(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [loadingPreview, startPreview] = useTransition();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreChats, setMoreChats] = useState<Chat[] | null>(null);
+  const [moreError, setMoreError] = useState<string | null>(null);
   const hiddenOnPage = chats.filter((chat) => removed.includes(chat.id)).length;
-  const visible = chats.filter((chat) => !removed.includes(chat.id));
+  const visible = chats.filter((chat) => !removed.includes(chat.id)).slice(0, 5);
   const visibleTotal = Math.max(0, total - hiddenOnPage);
+  const shownIds = new Set(visible.map((chat) => chat.id));
+  const remaining = (moreChats ?? chats).filter(
+    (chat) => !removed.includes(chat.id) && !shownIds.has(chat.id),
+  );
 
   useEffect(() => {
     if (recentlyRefreshed() || refreshInFlight) return;
@@ -119,6 +126,88 @@ export function UnreadInbox({
     });
   }
 
+  function openMore() {
+    setMoreOpen(true);
+    setMoreChats(null);
+    setMoreError(null);
+    void listUnreadChats().then((result) => {
+      if ("error" in result) {
+        setMoreError(result.error ?? "No se pudieron cargar las conversaciones");
+      } else {
+        setMoreChats(result.chats as Chat[]);
+      }
+    });
+  }
+
+  function renderChat(chat: Chat) {
+    const waiting = chat.unread_count ?? 0;
+    return (
+      <li
+        key={chat.id}
+        className="flex cursor-pointer flex-col gap-3 rounded-lg border border-separator p-4 transition-colors hover:bg-default sm:flex-row sm:items-start sm:justify-between"
+        onClick={() => openPreview(chat)}
+      >
+        <div className="min-w-0">
+          <p className="font-medium">{chat.name}</p>
+          <p className="text-sm text-muted">
+            {waiting > 0
+              ? `${waiting.toLocaleString("es-MX")} sin leer`
+              : "Marcada como no leída"}
+            {waiting > 0 && chat.marked_unread
+              ? " · marcada como no leída"
+              : ""}
+            {chat.unread_since
+              ? ` · desde ${formatDateTime(chat.unread_since)}`
+              : ""}
+          </p>
+          {chat.last_message_preview ? (
+            <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm">
+              {chat.last_message_from_me ? "Tú: " : ""}
+              {chat.last_message_preview}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-muted">
+              Sin texto del último mensaje.
+            </p>
+          )}
+        </div>
+        <div
+          className="flex shrink-0 items-center gap-1"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Button
+            isIconOnly
+            size="sm"
+            variant="ghost"
+            aria-label={`Ver ${chat.name}`}
+            onPress={() => openPreview(chat)}
+          >
+            <Eye size={16} />
+          </Button>
+          <Button
+            isIconOnly
+            size="sm"
+            variant="ghost"
+            aria-label={`Agendar mensaje a ${chat.name}`}
+            onPress={() => router.push(`/schedule?chat=${chat.id}`)}
+          >
+            <CalendarPlus size={16} />
+          </Button>
+          <Button
+            isIconOnly
+            size="sm"
+            variant="ghost"
+            aria-label={`Quitar ${chat.name} del inicio`}
+            isDisabled={busyId === chat.id}
+            onPress={() => dismiss(chat)}
+          >
+            <CircleMinus size={16} />
+          </Button>
+        </div>
+      </li>
+    );
+  }
+
   return (
     <section className="flex flex-col gap-3" aria-busy={refreshing}>
       <div className="flex items-center justify-between gap-3">
@@ -142,82 +231,46 @@ export function UnreadInbox({
         ) : null
       ) : (
         <ul className="flex flex-col gap-3">
-          {visible.map((chat) => {
-            const waiting = chat.unread_count ?? 0;
-            return (
-              <li
-                key={chat.id}
-                className="flex cursor-pointer flex-col gap-3 rounded-lg border border-separator p-4 transition-colors hover:bg-default sm:flex-row sm:items-start sm:justify-between"
-                onClick={() => openPreview(chat)}
-              >
-                <div className="min-w-0">
-                  <p className="font-medium">{chat.name}</p>
-                  <p className="text-sm text-muted">
-                    {waiting > 0
-                      ? `${waiting.toLocaleString("es-MX")} sin leer`
-                      : "Marcada como no leída"}
-                    {waiting > 0 && chat.marked_unread
-                      ? " · marcada como no leída"
-                      : ""}
-                    {chat.unread_since
-                      ? ` · desde ${formatDateTime(chat.unread_since)}`
-                      : ""}
-                  </p>
-                  {chat.last_message_preview ? (
-                    <p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm">
-                      {chat.last_message_from_me ? "Tú: " : ""}
-                      {chat.last_message_preview}
-                    </p>
-                  ) : (
-                    <p className="mt-2 text-sm text-muted">
-                      Sin texto del último mensaje.
-                    </p>
-                  )}
-                </div>
-                <div
-                  className="flex shrink-0 items-center gap-1"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <Button
-                    isIconOnly
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Ver ${chat.name}`}
-                    onPress={() => openPreview(chat)}
-                  >
-                    <Eye size={16} />
-                  </Button>
-                  <Button
-                    isIconOnly
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Agendar mensaje a ${chat.name}`}
-                    onPress={() => router.push(`/schedule?chat=${chat.id}`)}
-                  >
-                    <CalendarPlus size={16} />
-                  </Button>
-                  <Button
-                    isIconOnly
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Quitar ${chat.name} del inicio`}
-                    isDisabled={busyId === chat.id}
-                    onPress={() => dismiss(chat)}
-                  >
-                    <CircleMinus size={16} />
-                  </Button>
-                </div>
-              </li>
-            );
-          })}
+          {visible.map(renderChat)}
         </ul>
       )}
       {error ? <p className="text-sm text-danger">{error}</p> : null}
       {visibleTotal > visible.length ? (
-        <p className="text-sm text-muted">
-          Hay {visibleTotal - visible.length} conversaciones más sin leer.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted">
+            {visibleTotal - visible.length} conversaciones sin leer por mostrar.
+          </p>
+          <Button size="sm" variant="secondary" onPress={openMore}>
+            Ver más
+          </Button>
+        </div>
       ) : null}
+
+      <Modal isOpen={moreOpen} onOpenChange={setMoreOpen}>
+        <Modal.Backdrop>
+          <Modal.Container>
+            <Modal.Dialog>
+              <Modal.Header>
+                <Modal.Heading>Más conversaciones sin leer</Modal.Heading>
+              </Modal.Header>
+              <Modal.Body>
+                {moreChats === null && !moreError ? (
+                  <p className="text-sm text-muted">Cargando conversaciones...</p>
+                ) : null}
+                {moreError ? <p className="text-sm text-danger">{moreError}</p> : null}
+                <ul className="flex max-h-[60vh] flex-col gap-3 overflow-y-auto">
+                  {remaining.map(renderChat)}
+                </ul>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="ghost" onPress={() => setMoreOpen(false)}>
+                  Cerrar
+                </Button>
+              </Modal.Footer>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
 
       <Modal
         isOpen={preview !== null}

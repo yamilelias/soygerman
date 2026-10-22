@@ -86,3 +86,30 @@ export async function dismissUnread(chatId: string) {
   revalidatePath("/dashboard");
   return { ok: true as const };
 }
+
+export async function listUnreadChats() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const chats = [];
+  const pageSize = 500;
+  for (let start = 0; ; start += pageSize) {
+    const { data, error } = await supabase
+      .from("chats")
+      .select(
+        "id, user_id, wa_id, name, is_group, updated_at, unread_count, marked_unread, unread_since, last_message_at, last_message_preview, last_message_from_me",
+      )
+      .eq("inbox_visible", true)
+      .order("unread_since", { ascending: true, nullsFirst: false })
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .range(start, start + pageSize - 1);
+    if (error) return { error: error.message };
+    chats.push(...(data ?? []));
+    if (!data || data.length < pageSize) break;
+  }
+
+  return { chats };
+}
