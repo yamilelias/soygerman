@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FailedMessagesToast } from "@/components/failed-messages-toast";
 import { UnreadInbox } from "@/components/unread-inbox";
 import { formatDateTime } from "@/lib/format";
 import type { Chat, DailyDigest, ScheduledMessage } from "@/lib/types";
@@ -15,6 +16,9 @@ const messageColumns =
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const today = currentDayInMexico();
   const week = currentWeekInMexico();
 
@@ -70,6 +74,12 @@ export default async function DashboardPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      {user ? (
+        <FailedMessagesToast
+          userId={user.id}
+          initialCount={failedResult.count ?? 0}
+        />
+      ) : null}
       <div>
         <h1 className="text-2xl font-semibold">Inicio</h1>
         <p className="text-sm text-muted">

@@ -107,3 +107,18 @@ export async function rescheduleMessage(input: {
   revalidatePath("/dashboard");
   return { ok: true as const };
 }
+
+export async function countFailedMessages() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+
+  const { count, error } = await supabase
+    .from("scheduled_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "failed");
+  if (error) return { error: error.message };
+  return { count: count ?? 0 };
+}
