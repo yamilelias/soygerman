@@ -43,7 +43,7 @@ test("la credencial registrada se guarda y se vuelve a escribir en disco", async
     },
   };
 
-  assert.equal(await persistCreds(supabase, "user", filePath), true);
+  assert.equal(await persistCreds(supabase, "session", "user", filePath), true);
   fs.rmSync(filePath);
   const restored = path.join(dir, "nested", "creds.json");
   assert.equal(await restoreCreds(supabase, "user", restored), true);
@@ -67,7 +67,7 @@ test("Baileys 7 guarda la credencial aunque registered siga en false", async () 
       };
     },
   };
-  assert.equal(await persistCreds(supabase, "user", filePath), true);
+  assert.equal(await persistCreds(supabase, "session", "user", filePath), true);
   assert.equal(JSON.parse(body).me.id, "521@s.whatsapp.net");
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -87,7 +87,7 @@ test("una credencial a medias no se copia a la base", async () => {
       };
     },
   };
-  assert.equal(await persistCreds(supabase, "user", filePath), false);
+  assert.equal(await persistCreds(supabase, "session", "user", filePath), false);
   assert.equal(wrote, false);
   fs.rmSync(dir, { recursive: true, force: true });
 });

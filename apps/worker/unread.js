@@ -318,11 +318,12 @@ function isoFromSeconds(seconds) {
   return new Date(seconds * 1000).toISOString();
 }
 
-function groupChatRows(userId, chats, now, options = {}) {
+function groupChatRows(userId, sessionId, chats, now, options = {}) {
   const groups = new Map();
   for (const chat of chats) {
     const row = {
       user_id: userId,
+      session_id: sessionId,
       wa_id: chat.waId,
       name: chat.name,
       is_group: Boolean(chat.isGroup),

@@ -5,17 +5,20 @@ import { formatDateTime } from "@/lib/format";
 import type { Chat, DailyDigest, ScheduledMessage } from "@/lib/types";
 import { currentDayInMexico, currentWeekInMexico, formatWeekRange, mexicoDateString } from "@/lib/week";
 import { createClient } from "@/utils/supabase/server";
+import { activeLine } from "@/lib/lines";
 
 const unreadColumns =
-  "id, user_id, wa_id, name, is_group, updated_at, unread_count, marked_unread, unread_since, last_message_at, last_message_preview, last_message_from_me";
+  "id, user_id, session_id, wa_id, name, is_group, updated_at, unread_count, marked_unread, unread_since, last_message_at, last_message_preview, last_message_from_me";
 
 const UNREAD_LIMIT = 40;
 
 const messageColumns =
-  "id, user_id, chat_id, message_body, scheduled_at, status, error_message, created_at, chats(name, is_group)";
+  "id, user_id, session_id, sender_phone_number, chat_id, message_body, scheduled_at, status, error_message, created_at, chats(name, is_group)";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  const line = await activeLine();
+  if (!line) return <p>No hay teléfono activo.</p>;
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -28,33 +31,38 @@ export default async function DashboardPage() {
       .from("scheduled_messages")
       .select(messageColumns, { count: "exact" })
       .eq("status", "pending")
+      .eq("session_id", line.id)
       .order("scheduled_at", { ascending: true })
       .limit(8),
     supabase
       .from("scheduled_messages")
       .select("id", { count: "exact", head: true })
       .eq("status", "sent")
+      .eq("session_id", line.id)
       .gte("scheduled_at", week.start.toISOString())
       .lt("scheduled_at", week.end.toISOString()),
     supabase
       .from("scheduled_messages")
       .select("id", { count: "exact", head: true })
-      .eq("status", "failed"),
+      .eq("status", "failed")
+      .eq("session_id", line.id),
     supabase
       .from("chats")
       .select(unreadColumns, { count: "exact" })
       .eq("inbox_visible", true)
+      .eq("session_id", line.id)
       .order("unread_since", { ascending: true, nullsFirst: false })
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .limit(UNREAD_LIMIT),
     supabase
       .from("daily_digests")
       .select(
-        "id, user_id, digest_date, status, overview, items, error_message, model, created_at, updated_at",
+        "id, user_id, session_id, digest_date, status, overview, items, error_message, model, created_at, updated_at",
       )
       .eq("digest_date", mexicoDateString())
+      .eq("session_id", line.id)
       .maybeSingle(),
-    loadWeekPending(supabase, today.start, week.end),
+    loadWeekPending(supabase, line.id, today.start, week.end),
   ]);
 
   if (unreadResult.error) throw new Error(unreadResult.error.message);
@@ -76,7 +84,9 @@ export default async function DashboardPage() {
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       {user ? (
         <FailedMessagesToast
+          key={line.id}
           userId={user.id}
+          sessionId={line.id}
           initialCount={failedResult.count ?? 0}
         />
       ) : null}
@@ -92,7 +102,7 @@ export default async function DashboardPage() {
         <TodayDigest digest={digest} />
       </section>
 
-      <UnreadInbox chats={unread} total={unreadCount} />
+      <UnreadInbox key={line.id} sessionId={line.id} chats={unread} total={unreadCount} />
 
       <div className="grid gap-3 sm:grid-cols-2">
         <section className="rounded-lg border border-separator p-4">
@@ -190,6 +200,7 @@ export default async function DashboardPage() {
 
 async function loadWeekPending(
   supabase: Awaited<ReturnType<typeof createClient>>,
+  sessionId: string,
   start: Date,
   end: Date,
 ) {
@@ -200,6 +211,7 @@ async function loadWeekPending(
       .from("scheduled_messages")
       .select(messageColumns)
       .eq("status", "pending")
+      .eq("session_id", sessionId)
       .gte("scheduled_at", start.toISOString())
       .lt("scheduled_at", end.toISOString())
       .order("scheduled_at", { ascending: true })

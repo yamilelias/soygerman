@@ -12,6 +12,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/app/actions/auth";
+import { selectLine } from "@/app/actions/lines";
+import type { WhatsAppSession } from "@/lib/types";
+import { useRouter } from "next/navigation";
 
 const desktopLinks = [
   { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
@@ -34,8 +37,13 @@ function isActive(pathname: string, href: string) {
   return pathname === href;
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children, lines, activeId }: {
+  children: React.ReactNode;
+  lines: WhatsAppSession[];
+  activeId: string;
+}) {
   const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <div className="min-h-full md:grid md:grid-cols-[240px_1fr]">
@@ -73,6 +81,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Image src="/logo.png" alt="" width={28} height={28} />
             SoyGerman
           </Link>
+          <label className="mr-3 flex min-w-0 items-center gap-2 text-sm">
+            <span className="sr-only">Teléfono activo</span>
+            <select
+              aria-label="Teléfono activo"
+              className="max-w-44 rounded-md border border-separator bg-background px-2 py-1 text-sm"
+              value={activeId}
+              onChange={async (event) => {
+                const result = await selectLine(event.target.value);
+                if (!result.error) router.refresh();
+              }}
+            >
+              {lines.map((line) => (
+                <option key={line.id} value={line.id}>
+                  {line.label}{line.phone_number ? ` · ${line.phone_number}` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
           <form action={signOut} className="ml-auto">
             <Button type="submit" variant="ghost" size="sm">
               <LogOut size={16} />

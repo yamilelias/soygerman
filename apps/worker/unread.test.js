@@ -182,7 +182,7 @@ test("el guardado no pisa columnas que este chat no trajo", () => {
     { id: "b@s.whatsapp.net", name: "Beto" },
     false,
   ).state;
-  const groups = groupChatRows("user", [known, namedOnly], "2026-10-04T00:00:00.000Z");
+  const groups = groupChatRows("user", "session", [known, namedOnly], "2026-10-04T00:00:00.000Z");
   assert.equal(groups.length, 2);
   const detailed = groups.find((rows) => rows[0].wa_id.startsWith("a@"));
   const plain = groups.find((rows) => rows[0].wa_id.startsWith("b@"));
@@ -218,7 +218,7 @@ test("un chat archivado se guarda como archivado y un aviso posterior no lo desa
     false,
   );
   assert.equal(later.state.archived, true);
-  const rows = groupChatRows("user", [later.state], "2026-10-04T00:00:00.000Z");
+  const rows = groupChatRows("user", "session", [later.state], "2026-10-04T00:00:00.000Z");
   assert.equal(rows[0][0].archived, true);
   assert.equal(rows[0][0].unread_count, 3);
 
@@ -230,6 +230,7 @@ test("un chat archivado se guarda como archivado y un aviso posterior no lo desa
   assert.equal(opened.state.archived, false);
   const unarchived = groupChatRows(
     "user",
+    "session",
     [opened.state],
     "2026-10-04T00:00:00.000Z",
   );
@@ -353,7 +354,7 @@ test("el historial no vuelve a escribir un conteo viejo", () => {
   assert.equal(history.state.unreadCount, 0);
   assert.equal(history.state.unreadKnown, true);
 
-  const rows = groupChatRows("user", [history.state], "2026-10-06T00:00:00.000Z", {
+  const rows = groupChatRows("user", "session", [history.state], "2026-10-06T00:00:00.000Z", {
     includeUnread: false,
   });
   assert.equal(rows[0][0].unread_count, undefined);

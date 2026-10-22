@@ -49,6 +49,9 @@ export function PendingList({ messages }: { messages: ScheduledMessage[] }) {
               <p className="text-sm text-muted">
                 {formatDateTime(message.scheduled_at)}
               </p>
+              {message.sender_phone_number ? (
+                <p className="text-xs text-muted">Desde {message.sender_phone_number}</p>
+              ) : null}
               <p className="mt-2 whitespace-pre-wrap text-sm">
                 {message.message_body}
               </p>

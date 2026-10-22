@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
-    "test": "node --test session-status.test.js auth-store.test.js unread.test.js digest.test.js"
+    "test": "node --test session-status.test.js auth-store.test.js unread.test.js digest.test.js multi-session.test.js"
   },
   "dependencies": {
     "@langchain/core": "^1.2.14",

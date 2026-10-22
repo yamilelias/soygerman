@@ -52,10 +52,85 @@ app.get("/health", (_req, res) => {
 });
 
 const authenticate = requireUser(supabase);
+const CHAT_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+
+async function accountFor(req, { createPrimary = false } = {}) {
+  const sessionId = req.body?.sessionId;
+  if (sessionId != null && (typeof sessionId !== "string" || !CHAT_ID_PATTERN.test(sessionId))) {
+    const error = new Error("Línea no válida");
+    error.status = 400;
+    throw error;
+  }
+  let query = supabase.from("whatsapp_sessions")
+    .select("id, user_id, slot, status")
+    .eq("user_id", req.userId);
+  query = sessionId ? query.eq("id", sessionId) : query.eq("slot", 1);
+  let { data, error } = await query.maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data && createPrimary && !sessionId) {
+    const created = await supabase.from("whatsapp_sessions")
+      .upsert({ user_id: req.userId, slot: 1, label: "Principal" },
+        { onConflict: "user_id,slot", ignoreDuplicates: true })
+      .select("id, user_id, slot, status").maybeSingle();
+    if (created.error) throw new Error(created.error.message);
+    data = created.data;
+    if (!data) {
+      const found = await supabase.from("whatsapp_sessions")
+        .select("id, user_id, slot, status")
+        .eq("user_id", req.userId).eq("slot", 1).single();
+      if (found.error) throw new Error(found.error.message);
+      data = found.data;
+    }
+  }
+  if (!data) {
+    const missing = new Error("No se encontró la línea");
+    missing.status = 404;
+    throw missing;
+  }
+  sessions.register(data);
+  return data;
+}
+
+app.post("/sessions/create", authenticate, async (req, res, next) => {
+  try {
+    if (process.env.MULTI_PHONE_ENABLED !== "true") {
+      res.status(403).json({ error: "La segunda línea aún no está habilitada" });
+      return;
+    }
+    const { data, error } = await supabase.from("whatsapp_sessions")
+      .insert({ user_id: req.userId, slot: 2, label: "Segundo teléfono" })
+      .select("id, user_id, slot, status").single();
+    if (error) {
+      res.status(error.code === "23505" ? 409 : 500)
+        .json({ error: error.code === "23505" ? "Ya existe la segunda línea" : error.message });
+      return;
+    }
+    sessions.register(data);
+    res.json({ sessionId: data.id });
+  } catch (error) { next(error); }
+});
+
+app.post("/sessions/rename", authenticate, async (req, res, next) => {
+  try {
+    const account = await accountFor(req);
+    const label = typeof req.body?.label === "string" ? req.body.label.trim() : "";
+    if (!label || label.length > 40) {
+      res.status(400).json({ error: "El nombre debe tener entre 1 y 40 caracteres" });
+      return;
+    }
+    const { error } = await supabase.from("whatsapp_sessions")
+      .update({ label }).eq("id", account.id);
+    if (error) throw new Error(error.message);
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
 
 app.post("/sessions/connect", authenticate, async (req, res, next) => {
   try {
-    const result = await sessions.connect(req.userId);
+    const account = await accountFor(req, { createPrimary: true });
+    const result = await sessions.connect(account.id);
     res.json(result);
   } catch (error) {
     next(error);
@@ -64,7 +139,8 @@ app.post("/sessions/connect", authenticate, async (req, res, next) => {
 
 app.post("/sessions/disconnect", authenticate, async (req, res, next) => {
   try {
-    await sessions.disconnect(req.userId);
+    const account = await accountFor(req);
+    await sessions.disconnect(account.id);
     res.json({ status: "disconnected" });
   } catch (error) {
     next(error);
@@ -73,7 +149,8 @@ app.post("/sessions/disconnect", authenticate, async (req, res, next) => {
 
 app.post("/digests/run", authenticate, async (req, res, next) => {
   try {
-    const result = await runDigestForUser(supabase, sessions, req.userId, {
+    const account = await accountFor(req);
+    const result = await runDigestForUser(supabase, sessions, req.userId, account.id, {
       force: true,
     });
     if (!result) {
@@ -88,7 +165,8 @@ app.post("/digests/run", authenticate, async (req, res, next) => {
 
 app.post("/refresh-unread", authenticate, async (req, res, next) => {
   try {
-    const result = await sessions.refreshUnread(req.userId);
+    const account = await accountFor(req);
+    const result = await sessions.refreshUnread(account.id);
     res.json(result);
   } catch (error) {
     next(error);
@@ -97,15 +175,13 @@ app.post("/refresh-unread", authenticate, async (req, res, next) => {
 
 app.post("/sync-chats", authenticate, async (req, res, next) => {
   try {
-    const result = await sessions.syncChats(req.userId);
+    const account = await accountFor(req);
+    const result = await sessions.syncChats(account.id);
     res.json(result);
   } catch (error) {
     next(error);
   }
 });
-
-const CHAT_ID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function messageTime(at) {
   if (!at) return null;
@@ -120,7 +196,8 @@ app.post("/chats/messages", authenticate, async (req, res, next) => {
       res.status(400).json({ error: "Chat no válido" });
       return;
     }
-    if (!sessions.isReady(req.userId)) {
+    const account = await accountFor(req);
+    if (!sessions.isReady(account.id)) {
       res.status(409).json({ error: "WhatsApp no está conectado" });
       return;
     }
@@ -131,13 +208,14 @@ app.post("/chats/messages", authenticate, async (req, res, next) => {
       )
       .eq("id", chatId)
       .eq("user_id", req.userId)
+      .eq("session_id", account.id)
       .maybeSingle();
     if (error) throw new Error(error.message);
     if (!data) {
       res.status(404).json({ error: "No se encontró el chat" });
       return;
     }
-    const messages = (await sessions.recentMessages(req.userId, data, 20)).map(
+    const messages = (await sessions.recentMessages(account.id, data, 20)).map(
       (item) => ({
         at: messageTime(item.at),
         fromMe: item.fromMe,
@@ -153,7 +231,7 @@ app.post("/chats/messages", authenticate, async (req, res, next) => {
 
 app.use((error, _req, res, _next) => {
   log("http", `error ${error.message || error}`);
-  res.status(500).json({ error: error.message || "Error interno" });
+  res.status(error.status || 500).json({ error: error.message || "Error interno" });
 });
 
 app.listen(port, () => {
@@ -162,6 +240,9 @@ app.listen(port, () => {
     `puerto ${port} origen ${process.env.WEB_ORIGIN || "http://localhost:3000"} ${describeMemory()}`,
   );
   startCron(supabase, sessions);
+  setInterval(() => {
+    log("capacidad", `sesiones=${sessions.clients.size} ${describeMemory()}`);
+  }, 60_000).unref();
   sessions.restoreSessions().catch((error) => {
     log("restore", error.message || String(error));
   });

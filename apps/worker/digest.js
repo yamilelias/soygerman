@@ -200,13 +200,13 @@ function isFreshRunning(row, now) {
   return Number.isFinite(updated) && now.getTime() - updated < STALE_RUNNING_MS;
 }
 
-async function readDigest(supabase, userId, digestDate) {
+async function readDigest(supabase, sessionId, digestDate) {
   const { data, error } = await supabase
     .from("daily_digests")
     .select(
-      "id, user_id, digest_date, status, overview, items, error_message, model, updated_at",
+      "id, user_id, session_id, digest_date, status, overview, items, error_message, model, updated_at",
     )
-    .eq("user_id", userId)
+    .eq("session_id", sessionId)
     .eq("digest_date", digestDate)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -218,21 +218,21 @@ async function writeDigest(supabase, row) {
     .from("daily_digests")
     .upsert(
       { ...row, updated_at: new Date().toISOString() },
-      { onConflict: "user_id,digest_date" },
+      { onConflict: "session_id,digest_date" },
     )
     .select(
-      "id, user_id, digest_date, status, overview, items, error_message, model, updated_at",
+      "id, user_id, session_id, digest_date, status, overview, items, error_message, model, updated_at",
     )
     .maybeSingle();
   if (error) throw new Error(error.message);
   return data;
 }
 
-async function loadUnread(supabase, userId) {
+async function loadUnread(supabase, sessionId) {
   const { data, error, count } = await supabase
     .from("chats")
     .select(CHAT_COLUMNS, { count: "exact" })
-    .eq("user_id", userId)
+    .eq("session_id", sessionId)
     .eq("inbox_visible", true)
     .order("unread_since", { ascending: true, nullsFirst: false })
     .order("last_message_at", { ascending: false, nullsFirst: false })
@@ -242,20 +242,20 @@ async function loadUnread(supabase, userId) {
   return { rows, count: count ?? rows.length };
 }
 
-async function runDigestForUser(supabase, sessions, userId, options = {}) {
-  if (inflight.has(userId)) return null;
-  inflight.add(userId);
+async function runDigestForUser(supabase, sessions, userId, sessionId, options = {}) {
+  if (inflight.has(sessionId)) return null;
+  inflight.add(sessionId);
   const now = options.now || new Date();
   const force = options.force === true;
   const complete = options.complete || completeDigest;
   const fetchContext =
     options.fetchContext ||
-    ((chat) => sessions.recentTexts(userId, chat));
+    ((chat) => sessions.recentTexts(sessionId, chat));
   const digestDate = mexicoDate(now);
   const model = digestModelName();
 
   try {
-    const existing = await readDigest(supabase, userId, digestDate);
+    const existing = await readDigest(supabase, sessionId, digestDate);
     if (
       !force &&
       existing &&
@@ -267,6 +267,7 @@ async function runDigestForUser(supabase, sessions, userId, options = {}) {
 
     await writeDigest(supabase, {
       user_id: userId,
+      session_id: sessionId,
       digest_date: digestDate,
       status: "running",
       overview: null,
@@ -278,6 +279,7 @@ async function runDigestForUser(supabase, sessions, userId, options = {}) {
     const fail = (message) =>
       writeDigest(supabase, {
         user_id: userId,
+        session_id: sessionId,
         digest_date: digestDate,
         status: "failed",
         overview: null,
@@ -287,13 +289,14 @@ async function runDigestForUser(supabase, sessions, userId, options = {}) {
       });
 
     try {
-      if (!sessions.isReady(userId)) {
+      if (!sessions.isReady(sessionId)) {
         return await fail("WhatsApp no está conectado para este usuario");
       }
-      const { rows, count } = await loadUnread(supabase, userId);
+      const { rows, count } = await loadUnread(supabase, sessionId);
       if (rows.length === 0) {
         return await writeDigest(supabase, {
           user_id: userId,
+          session_id: sessionId,
           digest_date: digestDate,
           status: "empty",
           overview: null,
@@ -310,6 +313,7 @@ async function runDigestForUser(supabase, sessions, userId, options = {}) {
       });
       return await writeDigest(supabase, {
         user_id: userId,
+        session_id: sessionId,
         digest_date: digestDate,
         status: "ready",
         overview: composed.overview,
@@ -322,25 +326,29 @@ async function runDigestForUser(supabase, sessions, userId, options = {}) {
       return await fail(error.message || String(error));
     }
   } finally {
-    inflight.delete(userId);
+    inflight.delete(sessionId);
   }
 }
 
 async function runDailyDigests(supabase, sessions, now = new Date()) {
-  const { data, error } = await supabase
-    .from("whatsapp_sessions")
-    .select("user_id")
-    .eq("status", "connected");
-  if (error) {
-    log("resumen", error.message);
-    return;
-  }
-  for (const row of data || []) {
-    try {
-      await runDigestForUser(supabase, sessions, row.user_id, { now });
-    } catch (digestError) {
-      log("resumen", `${row.user_id} ${digestError.message || digestError}`);
+  for (let start = 0; ; start += 500) {
+    const { data, error } = await supabase
+      .from("whatsapp_sessions")
+      .select("id, user_id")
+      .eq("status", "connected")
+      .order("id").range(start, start + 499);
+    if (error) {
+      log("resumen", error.message);
+      return;
     }
+    for (const row of data || []) {
+      try {
+        await runDigestForUser(supabase, sessions, row.user_id, row.id, { now });
+      } catch (digestError) {
+        log("resumen", `${row.user_id} ${digestError.message || digestError}`);
+      }
+    }
+    if (!data || data.length < 500) break;
   }
 }
 

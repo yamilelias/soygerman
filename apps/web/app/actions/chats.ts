@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { findChats } from "@/lib/chats";
 import { createClient } from "@/utils/supabase/server";
+import { activeLine } from "@/lib/lines";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -21,12 +22,15 @@ export async function deleteChat(chatId: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
+  const line = await activeLine();
+  if (!line) return { error: "No hay teléfono activo" };
 
   const { error: cancelError } = await supabase
     .from("scheduled_messages")
     .update({ status: "cancelled" })
     .eq("user_id", user.id)
     .eq("chat_id", chatId)
+    .eq("session_id", line.id)
     .eq("status", "pending");
   if (cancelError) return { error: cancelError.message };
 
@@ -35,6 +39,7 @@ export async function deleteChat(chatId: string) {
     .update({ hidden: true })
     .eq("id", chatId)
     .eq("user_id", user.id)
+    .eq("session_id", line.id)
     .eq("hidden", false)
     .select("id");
   if (error) return { error: error.message };
@@ -56,11 +61,14 @@ export async function dismissUnread(chatId: string) {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
+  const line = await activeLine();
+  if (!line) return { error: "No hay teléfono activo" };
 
   const { data: chat, error: readError } = await supabase
     .from("chats")
     .select("last_message_at")
     .eq("id", chatId)
+    .eq("session_id", line.id)
     .eq("user_id", user.id)
     .maybeSingle();
   if (readError) return { error: readError.message };
@@ -78,6 +86,7 @@ export async function dismissUnread(chatId: string) {
     .from("chats")
     .update({ inbox_dismissed_at: dismissedAt })
     .eq("id", chatId)
+    .eq("session_id", line.id)
     .eq("user_id", user.id)
     .select("id");
   if (error) return { error: error.message };
@@ -93,6 +102,8 @@ export async function listUnreadChats() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
+  const line = await activeLine();
+  if (!line) return { error: "No hay teléfono activo" };
 
   const chats = [];
   const pageSize = 500;
@@ -100,9 +111,10 @@ export async function listUnreadChats() {
     const { data, error } = await supabase
       .from("chats")
       .select(
-        "id, user_id, wa_id, name, is_group, updated_at, unread_count, marked_unread, unread_since, last_message_at, last_message_preview, last_message_from_me",
+        "id, user_id, session_id, wa_id, name, is_group, updated_at, unread_count, marked_unread, unread_since, last_message_at, last_message_preview, last_message_from_me",
       )
       .eq("inbox_visible", true)
+      .eq("session_id", line.id)
       .order("unread_since", { ascending: true, nullsFirst: false })
       .order("last_message_at", { ascending: false, nullsFirst: false })
       .range(start, start + pageSize - 1);

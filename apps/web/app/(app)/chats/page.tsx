@@ -1,5 +1,6 @@
 import { ChatExplorer } from "@/components/chat-explorer";
 import { CHAT_PAGE_SIZE, searchChats, type ChatKind } from "@/lib/chats";
+import { activeLine } from "@/lib/lines";
 
 function kindFrom(value: string | undefined): ChatKind {
   if (value === "groups" || value === "direct") return value;
@@ -15,6 +16,7 @@ export default async function ChatsPage({
   const query = typeof params.q === "string" ? params.q : "";
   const kind = kindFrom(params.kind);
   const page = Number(params.page);
+  const line = await activeLine();
   const { chats, total } = await searchChats({
     query,
     kind,
@@ -24,6 +26,7 @@ export default async function ChatsPage({
 
   return (
     <ChatExplorer
+      key={line?.id}
       chats={chats}
       total={total}
       query={query}

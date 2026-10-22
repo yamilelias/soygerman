@@ -3,6 +3,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { WhatsAppConnection } from "@/components/whatsapp-connection";
 import { formatDate } from "@/lib/format";
 import { createClient } from "@/utils/supabase/server";
+import { listLines } from "@/lib/lines";
+import { AddWhatsAppLine } from "@/components/add-whatsapp-line";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -18,6 +20,7 @@ export default async function SettingsPage() {
     .maybeSingle();
 
   const email = profile?.email ?? user.email ?? "";
+  const lines = await listLines();
 
   return (
     <div className="mx-auto flex w-full max-w-xl flex-col gap-8">
@@ -62,7 +65,10 @@ export default async function SettingsPage() {
             que la sesión queda conectada.
           </p>
         </div>
-        <WhatsAppConnection />
+        {lines.map((line) => <WhatsAppConnection key={line.id} initialSession={line} />)}
+        {lines.length < 2 ? (
+          <AddWhatsAppLine enabled={process.env.MULTI_PHONE_ENABLED === "true"} />
+        ) : null}
       </section>
     </div>
   );

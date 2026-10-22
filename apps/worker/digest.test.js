@@ -169,6 +169,7 @@ test("un resumen ya listo no vuelve a llamar al modelo", async () => {
     fakeSupabase({ digest: ready, chats: [] }),
     { isReady: () => true },
     "user-1",
+    "session-1",
     {
       now: new Date("2026-10-04T13:00:00.000Z"),
       async complete() {
@@ -188,6 +189,7 @@ test("sin chats sin leer no llama al modelo", async () => {
     fakeSupabase({ digest: null, chats: [], saved }),
     { isReady: () => true },
     "user-1",
+    "session-1",
     {
       now: new Date("2026-10-04T13:00:00.000Z"),
       async complete() {
@@ -207,6 +209,7 @@ test("si WhatsApp no está listo el día queda en fallo", async () => {
     fakeSupabase({ digest: null, chats: [], saved }),
     { isReady: () => false },
     "user-1",
+    "session-1",
     {
       now: new Date("2026-10-04T13:00:00.000Z"),
       async complete() {

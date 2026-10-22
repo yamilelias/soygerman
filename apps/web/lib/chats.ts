@@ -1,15 +1,16 @@
 import { CHAT_PAGE_SIZE, type ChatKind } from "@/lib/chat-list";
 import type { Chat } from "@/lib/types";
 import { createClient } from "@/utils/supabase/server";
+import { activeLine } from "@/lib/lines";
 
 export { CHAT_PAGE_SIZE, type ChatKind };
 
 const SEARCH_LIMIT = 20;
 
-const COLUMNS = "id, user_id, wa_id, name, is_group, updated_at";
+const COLUMNS = "id, user_id, session_id, wa_id, name, is_group, updated_at";
 
 const CHAT_COLUMNS =
-  "id, user_id, wa_id, name, is_group, updated_at, unread_count, marked_unread, unread_since, last_message_at, last_message_preview, last_message_from_me";
+  "id, user_id, session_id, wa_id, name, is_group, updated_at, unread_count, marked_unread, unread_since, last_message_at, last_message_preview, last_message_from_me";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -52,16 +53,18 @@ export async function searchChats({
   pageSize?: number;
 } = {}): Promise<{ chats: Chat[]; total: number }> {
   const supabase = await createClient();
+  const line = await activeLine();
+  if (!line) return { chats: [], total: 0 };
   const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
   const size = Math.min(Math.max(Math.floor(pageSize), 1), CHAT_PAGE_SIZE);
   const from = (safePage - 1) * size;
   const match = matchFilter(query);
 
-  let listed = supabase.from("chats").select(COLUMNS).eq("hidden", false);
+  let listed = supabase.from("chats").select(COLUMNS).eq("hidden", false).eq("session_id", line.id);
   let counted = supabase
     .from("chats")
     .select("id", { count: "exact", head: true })
-    .eq("hidden", false);
+    .eq("hidden", false).eq("session_id", line.id);
   if (kind === "groups") {
     listed = listed.eq("is_group", true);
     counted = counted.eq("is_group", true);
@@ -99,10 +102,13 @@ export async function findChats(query: string): Promise<Chat[]> {
 export async function getChat(id: string): Promise<Chat | null> {
   if (!UUID_PATTERN.test(id)) return null;
   const supabase = await createClient();
+  const line = await activeLine();
+  if (!line) return null;
   const { data, error } = await supabase
     .from("chats")
     .select(CHAT_COLUMNS)
     .eq("id", id)
+    .eq("session_id", line.id)
     .eq("hidden", false)
     .maybeSingle();
   if (error) throw new Error(error.message);

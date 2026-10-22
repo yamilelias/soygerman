@@ -104,7 +104,12 @@ export function HistoryTable({ messages }: { messages: ScheduledMessage[] }) {
             <Table.Body>
               {messages.map((message) => (
                 <Table.Row key={message.id} id={message.id}>
-                  <Table.Cell>{message.chats?.name ?? "Chat eliminado"}</Table.Cell>
+                  <Table.Cell>
+                    {message.chats?.name ?? "Chat eliminado"}
+                    {message.sender_phone_number ? (
+                      <span className="block text-xs text-muted">Desde {message.sender_phone_number}</span>
+                    ) : null}
+                  </Table.Cell>
                   <Table.Cell>{formatDateTime(message.scheduled_at)}</Table.Cell>
                   <Table.Cell>
                     <Chip color={colors[message.status]} variant="soft" size="sm">

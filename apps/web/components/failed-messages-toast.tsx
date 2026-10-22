@@ -9,16 +9,18 @@ const POLL_INTERVAL_MS = 60_000;
 
 export function FailedMessagesToast({
   userId,
+  sessionId,
   initialCount,
 }: {
   userId: string;
+  sessionId: string;
   initialCount: number;
 }) {
   const router = useRouter();
   const [newFailures, setNewFailures] = useState(0);
 
   useEffect(() => {
-    const key = `soygerman-seen-failures-${userId}`;
+    const key = `soygerman-seen-failures-${userId}-${sessionId}`;
     let seenInMemory = 0;
     let active = true;
 
@@ -52,7 +54,7 @@ export function FailedMessagesToast({
       window.clearTimeout(initialTimer);
       window.clearInterval(interval);
     };
-  }, [userId, initialCount]);
+  }, [userId, sessionId, initialCount]);
 
   if (newFailures === 0) return null;
 

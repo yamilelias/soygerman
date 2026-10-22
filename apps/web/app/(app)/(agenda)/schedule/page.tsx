@@ -1,5 +1,6 @@
 import { ScheduleForm } from "@/components/schedule-form";
 import { getChat, searchChats } from "@/lib/chats";
+import { activeLine } from "@/lib/lines";
 
 export default async function SchedulePage({
   searchParams,
@@ -8,6 +9,7 @@ export default async function SchedulePage({
 }) {
   const params = await searchParams;
   const chatId = typeof params.chat === "string" ? params.chat : "";
+  const line = await activeLine();
   const [{ total }, selected] = await Promise.all([
     searchChats({ pageSize: 1 }),
     chatId ? getChat(chatId) : Promise.resolve(null),
@@ -21,7 +23,7 @@ export default async function SchedulePage({
           llega sola.
         </p>
       ) : (
-        <ScheduleForm selected={selected} />
+        <ScheduleForm key={line?.id} selected={selected} />
       )}
     </div>
   );

@@ -39,8 +39,10 @@ function dataPath() {
   return process.env.BAILEYS_DATA_PATH || path.join(__dirname, ".baileys");
 }
 
-function sessionDir(userId) {
-  return path.join(dataPath(), `session-${userId}`);
+const sessionPaths = new Map();
+
+function sessionDir(sessionId) {
+  return path.join(dataPath(), `session-${sessionPaths.get(sessionId) || sessionId}`);
 }
 
 function credsPath(userId) {
@@ -184,6 +186,20 @@ function toBaileysJid(waId) {
   return waId;
 }
 
+function ownPhone(jid) {
+  const match = /^(\d{8,15})(?::\d+)?@s\.whatsapp\.net$/.exec(jid || "");
+  return match ? `+${match[1]}` : null;
+}
+
+function storedPhone(sessionId) {
+  try {
+    const creds = JSON.parse(fs.readFileSync(credsPath(sessionId), "utf8"));
+    return ownPhone(creds.me?.id);
+  } catch {
+    return null;
+  }
+}
+
 function closeStatusCode(update) {
   return update?.lastDisconnect?.error?.output?.statusCode;
 }
@@ -246,6 +262,18 @@ class SessionManager {
     this.supabase = supabase;
     this.clients = new Map();
     this.restoreFinished = false;
+    this.accounts = new Map();
+  }
+
+  register(session) {
+    this.accounts.set(session.id, session);
+    sessionPaths.set(session.id, session.slot === 1 ? session.user_id : session.id);
+  }
+
+  owner(sessionId) {
+    const account = this.accounts.get(sessionId);
+    if (!account) throw new Error("Línea de WhatsApp desconocida");
+    return account.user_id;
   }
 
   getClient(userId) {
@@ -319,21 +347,14 @@ class SessionManager {
     });
   }
 
-  async upsertSession(userId, fields) {
-    const { error } = await this.supabase.from("whatsapp_sessions").upsert(
-      {
-        user_id: userId,
-        ...fields,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" },
-    );
+  async upsertSession(sessionId, fields) {
+    const { error } = await this.supabase.from("whatsapp_sessions")
+      .update({ ...fields, updated_at: new Date().toISOString() })
+      .eq("id", sessionId);
     if (error) {
-      log(
-        "sesión",
-        `no se guardó ${userId} status=${fields.status || "sin cambio"}: ${error.message}`,
-      );
+      log("sesión", `no se guardó ${sessionId}: ${error.message}`);
     }
+    return error;
   }
 
   isLinkInProgress(entry) {
@@ -391,6 +412,7 @@ class SessionManager {
       await this.upsertSession(userId, {
         status: "connecting",
         qr_code_base64: null,
+        error_message: null,
       });
     }
     await this.launch(userId, 1, 1, 0);
@@ -458,10 +480,12 @@ class SessionManager {
     sock.ev.on("creds.update", () => {
       credsWrite = credsWrite
         .then(async () => {
+          if (!still()) return;
           await saveCreds();
+          if (!still()) return;
           if (sessionIsRegistered(userId)) {
             entry.registered = true;
-            await persistCreds(this.supabase, userId, credsPath(userId));
+            await persistCreds(this.supabase, userId, this.owner(userId), credsPath(userId));
           }
         })
         .catch((error) => {
@@ -599,6 +623,32 @@ class SessionManager {
     }
 
     if (outcome.action === "ready") {
+      const phone = ownPhone(sock.user?.id) || storedPhone(userId);
+      if (!phone) {
+        await this.disconnect(userId);
+        await this.upsertSession(userId, {
+          error_message: "No se pudo identificar el número de WhatsApp",
+        });
+        return;
+      }
+      const phoneError = await this.upsertSession(userId, {
+        phone_number: phone,
+        error_message: null,
+      });
+      if (phoneError) {
+        if (phoneError.code === "23505") {
+          await this.disconnect(userId);
+          await this.upsertSession(userId, {
+            error_message: "Este número ya está conectado en la otra línea",
+          });
+        } else {
+          log("sesión", `${userId} no guardó el número: ${phoneError.message}`);
+          await this.relaunch(userId, sock, generation, {
+            fresh: false, consumeAttempt: false,
+          });
+        }
+        return;
+      }
       this.stopMemory(entry);
       entry.status = "ready";
       entry.registered = true;
@@ -609,7 +659,7 @@ class SessionManager {
         qr_code_base64: null,
       });
       if (entry.flushCreds) await entry.flushCreds();
-      await persistCreds(this.supabase, userId, credsPath(userId));
+      await persistCreds(this.supabase, userId, this.owner(userId), credsPath(userId));
       log("ready", `${userId} ${describeMemory()}`);
       this.scheduleAutoSync(userId);
       return;
@@ -729,6 +779,7 @@ class SessionManager {
       this.stopUnreadFlush(entry);
       this.stopMemory(entry);
       this.clients.delete(userId);
+      if (entry.flushCreds) await entry.flushCreds();
       try {
         await entry.sock.logout();
       } catch (error) {
@@ -738,10 +789,12 @@ class SessionManager {
     }
     discardSession(userId);
     await deleteCreds(this.supabase, userId);
+    await this.upsertSession(userId, { phone_number: null });
     await this.markDisconnected(userId);
   }
 
   async markDisconnected(userId) {
+    await this.upsertSession(userId, { phone_number: null });
     await this.markClosed(userId, "disconnected", { clear: true });
   }
 
@@ -788,7 +841,7 @@ class SessionManager {
     const { data, error } = await this.supabase
       .from("whatsapp_sessions")
       .select("status")
-      .eq("user_id", userId)
+      .eq("id", userId)
       .maybeSingle();
     if (error) {
       log("sesión", `no se leyó ${userId}: ${error.message}`);
@@ -813,7 +866,7 @@ class SessionManager {
         status: "failed",
         error_message: errorMessage,
       })
-      .eq("user_id", userId)
+      .eq("session_id", userId)
       .in("status", ["pending", "processing"]);
     if (messageError) {
       log(
@@ -825,7 +878,7 @@ class SessionManager {
     const { error } = await this.supabase
       .from("chats")
       .delete()
-      .eq("user_id", userId);
+      .eq("session_id", userId);
     if (error) {
       log("chats", `no se borraron ${userId}: ${error.message}`);
       return;
@@ -860,13 +913,13 @@ class SessionManager {
 
   async upsertChatRows(userId, chats, options) {
     const now = new Date().toISOString();
-    const groups = groupChatRows(userId, chats, now, options);
+    const groups = groupChatRows(this.owner(userId), userId, chats, now, options);
     for (const rows of groups) {
       for (let index = 0; index < rows.length; index += 200) {
         const chunk = rows.slice(index, index + 200);
         const { error } = await this.supabase
           .from("chats")
-          .upsert(chunk, { onConflict: "user_id,wa_id" });
+          .upsert(chunk, { onConflict: "session_id,wa_id" });
         if (error) {
           log("sync", `${userId} no se guardó: ${error.message}`);
           throw new Error(error.message);
@@ -937,7 +990,7 @@ class SessionManager {
     const { data, error } = await this.supabase
       .from("chats")
       .select("wa_id, name, is_group, unread_count, marked_unread")
-      .eq("user_id", userId)
+      .eq("session_id", userId)
       .or("unread_count.gt.0,marked_unread.eq.true")
       .limit(1000);
     if (error) {
@@ -1058,26 +1111,21 @@ class SessionManager {
 
   async restoreSessions() {
     try {
-      const directory = dataPath();
-      if (fs.existsSync(directory)) {
-        const entries = fs.readdirSync(directory, { withFileTypes: true });
-        for (const item of entries) {
-          if (!item.isDirectory() || !item.name.startsWith("session-")) {
-            continue;
+      for (let start = 0; ; start += 500) {
+        const { data, error } = await this.supabase.from("whatsapp_sessions")
+          .select("id, user_id, slot, status")
+          .order("id").range(start, start + 499);
+        if (error) throw new Error(error.message);
+        for (const account of data || []) {
+          this.register(account);
+          if (await this.prepareAuth(account.id)) {
+            log("restore", `${account.id} ${describeMemory()}`);
+            await this.connect(account.id);
+          } else if (account.status === "connected") {
+            await this.upsertSession(account.id, { status: "interrupted", qr_code_base64: null });
           }
-          const userId = item.name.slice("session-".length);
-          if (!UUID_PATTERN.test(userId)) continue;
-          if (!(await this.prepareAuth(userId))) {
-            log(
-              "restore",
-              `${userId} sin sesión lista; se borra el perfil a medias ${describeMemory()}`,
-            );
-            discardSession(userId);
-            continue;
-          }
-          log("restore", `${userId} ${describeMemory()}`);
-          await this.connect(userId);
         }
+        if (!data || data.length < 500) break;
       }
     } catch (error) {
       log("restore", error.message || String(error));
@@ -1088,17 +1136,21 @@ class SessionManager {
   }
 
   async reconcileStaleSessions() {
-    const { data, error } = await this.supabase
-      .from("whatsapp_sessions")
-      .select("user_id, status")
-      .in("status", ["connected", "interrupted"]);
-    if (error) {
-      log("restore", `no se revisaron sesiones: ${error.message}`);
-      return;
-    }
-    for (const row of data || []) {
-      if (this.clients.has(row.user_id)) continue;
-      await this.interrupt(row.user_id);
+    for (let start = 0; ; start += 500) {
+      const { data, error } = await this.supabase
+        .from("whatsapp_sessions")
+        .select("id, status")
+        .in("status", ["connected", "interrupted"])
+        .order("id").range(start, start + 499);
+      if (error) {
+        log("restore", `no se revisaron sesiones: ${error.message}`);
+        return;
+      }
+      for (const row of data || []) {
+        if (this.clients.has(row.id)) continue;
+        await this.interrupt(row.id);
+      }
+      if (!data || data.length < 500) break;
     }
   }
 }
@@ -1111,6 +1163,8 @@ module.exports = {
   shouldDiscardSession,
   shouldSyncHistory,
   toBaileysJid,
+  ownPhone,
+  sessionDir,
   CLOSE_CONNECTION_LOST,
   CLOSE_CONNECTION_CLOSED,
   CLOSE_LOGGED_OUT,

@@ -9,6 +9,10 @@ export type WhatsAppSessionStatus =
 export type WhatsAppSession = {
   id: string;
   user_id: string;
+  slot: 1 | 2;
+  label: string;
+  phone_number: string | null;
+  error_message: string | null;
   status: WhatsAppSessionStatus;
   qr_code_base64: string | null;
   updated_at: string;
@@ -17,6 +21,7 @@ export type WhatsAppSession = {
 export type Chat = {
   id: string;
   user_id: string;
+  session_id: string;
   wa_id: string;
   name: string;
   is_group: boolean;
@@ -47,6 +52,7 @@ export type DigestItem = {
 export type DailyDigest = {
   id: string;
   user_id: string;
+  session_id: string;
   digest_date: string;
   status: DigestStatus;
   overview: string | null;
@@ -67,7 +73,9 @@ export type ChatPreviewMessage = {
 export type ScheduledMessage = {
   id: string;
   user_id: string;
+  session_id: string;
   chat_id: string | null;
+  sender_phone_number: string | null;
   message_body: string;
   scheduled_at: string;
   status: MessageStatus;

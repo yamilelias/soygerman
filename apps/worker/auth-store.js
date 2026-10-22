@@ -19,17 +19,18 @@ function readCredsFile(filePath) {
   }
 }
 
-async function persistCreds(supabase, userId, filePath) {
+async function persistCreds(supabase, sessionId, userId, filePath) {
   const creds = readCredsFile(filePath);
   if (!credsAreRegistered(creds)) return false;
   const { error } = await supabase.from("whatsapp_auth_files").upsert(
     {
       user_id: userId,
+      session_id: sessionId,
       name: CREDS_FILE,
       body: JSON.stringify(creds),
       updated_at: new Date().toISOString(),
     },
-    { onConflict: "user_id,name" },
+    { onConflict: "session_id,name" },
   );
   if (error) {
     log("perfil", `${userId} no guardó la credencial: ${error.message}`);
@@ -39,15 +40,15 @@ async function persistCreds(supabase, userId, filePath) {
   return true;
 }
 
-async function readStoredCreds(supabase, userId) {
+async function readStoredCreds(supabase, sessionId) {
   const { data, error } = await supabase
     .from("whatsapp_auth_files")
     .select("body")
-    .eq("user_id", userId)
+    .eq("session_id", sessionId)
     .eq("name", CREDS_FILE)
     .maybeSingle();
   if (error) {
-    log("perfil", `${userId} no leyó la credencial: ${error.message}`);
+    log("perfil", `${sessionId} no leyó la credencial: ${error.message}`);
     return null;
   }
   if (!data?.body) return null;
@@ -60,22 +61,22 @@ async function readStoredCreds(supabase, userId) {
   return data.body;
 }
 
-async function restoreCreds(supabase, userId, filePath) {
-  const body = await readStoredCreds(supabase, userId);
+async function restoreCreds(supabase, sessionId, filePath) {
+  const body = await readStoredCreds(supabase, sessionId);
   if (!body) return false;
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, body);
-  log("perfil", `${userId} credencial restaurada`);
+  log("perfil", `${sessionId} credencial restaurada`);
   return true;
 }
 
-async function deleteCreds(supabase, userId) {
+async function deleteCreds(supabase, sessionId) {
   const { error } = await supabase
     .from("whatsapp_auth_files")
     .delete()
-    .eq("user_id", userId);
+    .eq("session_id", sessionId);
   if (error) {
-    log("perfil", `${userId} no borró la credencial: ${error.message}`);
+    log("perfil", `${sessionId} no borró la credencial: ${error.message}`);
   }
 }
 

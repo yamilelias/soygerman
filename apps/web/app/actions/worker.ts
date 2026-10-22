@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { ChatPreviewMessage } from "@/lib/types";
 import { createClient } from "@/utils/supabase/server";
+import { activeLine } from "@/lib/lines";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -63,12 +64,13 @@ async function callWorker<T extends Record<string, unknown> = Record<string, nev
   }
 }
 
-export async function connectWhatsApp() {
-  return callWorker("/sessions/connect");
+export async function connectWhatsApp(sessionId?: string) {
+  return callWorker("/sessions/connect", undefined,
+    sessionId ? { sessionId } : undefined);
 }
 
-export async function disconnectWhatsApp() {
-  const result = await callWorker("/sessions/disconnect");
+export async function disconnectWhatsApp(sessionId: string) {
+  const result = await callWorker("/sessions/disconnect", undefined, { sessionId });
   if ("ok" in result) {
     revalidatePath("/chats");
     revalidatePath("/schedule");
@@ -78,24 +80,28 @@ export async function disconnectWhatsApp() {
   return result;
 }
 
-export async function syncChats() {
-  const result = await callWorker("/sync-chats");
+export async function syncChats(sessionId: string) {
+  const result = await callWorker("/sync-chats", undefined, { sessionId });
   if ("ok" in result) revalidatePath("/chats");
   return result;
 }
 
 export async function refreshUnread() {
-  const result = await callWorker("/refresh-unread", 45000);
+  const line = await activeLine();
+  if (!line) return { error: "No hay teléfono activo" };
+  const result = await callWorker("/refresh-unread", 45000, { sessionId: line.id });
   if ("ok" in result) revalidatePath("/dashboard");
   return result;
 }
 
 export async function loadChatPreview(chatId: string) {
   if (!UUID_PATTERN.test(chatId)) return { error: "Chat no válido" };
+  const line = await activeLine();
+  if (!line) return { error: "No hay teléfono activo" };
   const result = await callWorker<{ messages?: ChatPreviewMessage[] }>(
     "/chats/messages",
     20000,
-    { chatId },
+    { chatId, sessionId: line.id },
   );
   if (!("ok" in result)) {
     return { error: result.error ?? "Error del worker" };
@@ -103,4 +109,20 @@ export async function loadChatPreview(chatId: string) {
   return {
     messages: Array.isArray(result.messages) ? result.messages : [],
   };
+}
+
+export async function createWhatsAppLine() {
+  if (process.env.MULTI_PHONE_ENABLED !== "true") {
+    return { error: "La segunda línea aún no está habilitada" };
+  }
+  const result = await callWorker<{ sessionId?: string }>("/sessions/create");
+  if ("ok" in result) revalidatePath("/settings");
+  return result;
+}
+
+export async function renameWhatsAppLine(sessionId: string, label: string) {
+  if (!UUID_PATTERN.test(sessionId)) return { error: "Línea no válida" };
+  const result = await callWorker("/sessions/rename", undefined, { sessionId, label });
+  if ("ok" in result) revalidatePath("/settings");
+  return result;
 }

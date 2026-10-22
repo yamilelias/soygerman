@@ -7,6 +7,7 @@ import {
   connectWhatsApp,
   disconnectWhatsApp,
   syncChats,
+  renameWhatsAppLine,
 } from "@/app/actions/worker";
 import type { WhatsAppSession, WhatsAppSessionStatus } from "@/lib/types";
 import { createClient } from "@/utils/supabase/client";
@@ -37,10 +38,10 @@ const PAIRING_STATUSES: WhatsAppSessionStatus[] = [
   "authenticating",
 ];
 
-async function pullChats() {
+async function pullChats(sessionId: string) {
   let lastError = "No se pudieron traer los chats";
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    const result = await syncChats();
+    const result = await syncChats(sessionId);
     if (!result.error) return { ok: true as const };
     lastError = result.error;
     if (!result.error.includes("No se pudo leer")) break;
@@ -49,10 +50,15 @@ async function pullChats() {
   return { error: lastError };
 }
 
-export function WhatsAppConnection({ start = false }: { start?: boolean }) {
+export function WhatsAppConnection({ start = false, initialSession = null }: {
+  start?: boolean;
+  initialSession?: WhatsAppSession | null;
+}) {
   const router = useRouter();
-  const [session, setSession] = useState<WhatsAppSession | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialSessionId = initialSession?.id;
+  const [session, setSession] = useState<WhatsAppSession | null>(initialSession);
+  const [loading, setLoading] = useState(!initialSession);
+  const [label, setLabel] = useState(initialSession?.label ?? "");
   const [linking, setLinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -70,8 +76,9 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
     async function readSession(userId: string) {
       const { data, error } = await supabase
         .from("whatsapp_sessions")
-        .select("id, user_id, status, qr_code_base64, updated_at")
+        .select("id, user_id, slot, label, phone_number, error_message, status, qr_code_base64, updated_at")
         .eq("user_id", userId)
+        .eq(initialSessionId ? "id" : "slot", initialSessionId ?? 1)
         .maybeSingle();
       if (!active) return;
       if (error) {
@@ -79,6 +86,7 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
         return;
       }
       setSession(data as WhatsAppSession | null);
+      if (data?.label) setLabel(data.label);
     }
 
     async function load() {
@@ -101,11 +109,15 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
             event: "*",
             schema: "public",
             table: "whatsapp_sessions",
-            filter: `user_id=eq.${user.id}`,
+            filter: initialSessionId ? `id=eq.${initialSessionId}` : `user_id=eq.${user.id}`,
           },
           (payload) => {
             if (payload.new && "status" in payload.new) {
-              setSession(payload.new as WhatsAppSession);
+              const incoming = payload.new as WhatsAppSession;
+              if (initialSessionId || incoming.slot === 1) {
+                setSession(incoming);
+                setLabel(incoming.label);
+              }
             }
           },
         )
@@ -120,7 +132,7 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
       active = false;
       if (channel) supabase.removeChannel(channel);
     };
-  }, []);
+  }, [initialSessionId]);
 
   useEffect(() => {
     if (!session) return;
@@ -154,7 +166,7 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
         if (syncedStamp.current !== session.updated_at) {
           syncedStamp.current = session.updated_at;
           startTransition(async () => {
-            const result = await pullChats();
+            const result = await pullChats(session.id);
             if (result.error) setError(result.error);
             else router.refresh();
           });
@@ -165,7 +177,7 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
     if (session.status === "disconnected" && sawProgress.current) {
       sawProgress.current = false;
       setLinking(false);
-      if (!ignoreDisconnect.current) {
+      if (!ignoreDisconnect.current && !session.error_message) {
         setError("No se pudo vincular WhatsApp. Puedes intentarlo otra vez.");
       }
       ignoreDisconnect.current = false;
@@ -178,14 +190,14 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
     resumed.current = true;
     setLinking(true);
     startTransition(async () => {
-      const result = await connectWhatsApp();
+      const result = await connectWhatsApp(initialSessionId);
       if (result.error) {
         resumed.current = false;
         setLinking(false);
         setError(result.error);
       }
     });
-  }, [loading, session]);
+  }, [loading, session, initialSessionId]);
 
   function run(action: () => Promise<{ error?: string; ok?: true }>) {
     setError(null);
@@ -201,7 +213,7 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
     ignoreDisconnect.current = false;
     setLinking(true);
     startTransition(async () => {
-      const result = await connectWhatsApp();
+      const result = await connectWhatsApp(initialSessionId);
       if (result.error) {
         setLinking(false);
         setError(result.error);
@@ -214,7 +226,7 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
     sawProgress.current = false;
     setLinking(false);
     setError(null);
-    run(disconnectWhatsApp);
+    if (session) run(() => disconnectWhatsApp(session.id));
   }
 
   const storedStatus = session?.status ?? "disconnected";
@@ -230,7 +242,7 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
     <Card className={`mx-auto w-full ${start ? "max-w-md" : "max-w-xl"}`}>
       <Card.Header className="flex items-center justify-between gap-3">
         <div>
-          <Card.Title>WhatsApp</Card.Title>
+          <Card.Title>{session?.label ?? "WhatsApp"}</Card.Title>
           <Card.Description>
             {start
               ? "Escanea el código para traer tus chats."
@@ -242,6 +254,22 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
         </Chip>
       </Card.Header>
       <Card.Content className="flex flex-col gap-4">
+        {!start && session ? (
+          <div className="flex flex-col gap-2 text-sm">
+            <p className="text-muted">Número: {session.phone_number ?? "Se mostrará al vincular"}</p>
+            <form className="flex gap-2" onSubmit={(event) => {
+              event.preventDefault();
+              startTransition(async () => {
+                const result = await renameWhatsAppLine(session.id, label);
+                if (result.error) setError(result.error);
+                else router.refresh();
+              });
+            }}>
+              <input aria-label="Nombre de la línea" className="min-w-0 flex-1 rounded-md border border-separator bg-background px-2" value={label} maxLength={40} onChange={(event) => setLabel(event.target.value)} />
+              <Button type="submit" variant="secondary" isDisabled={pending}>Guardar nombre</Button>
+            </form>
+          </div>
+        ) : null}
         {loading ? <Spinner /> : null}
 
         {!loading && showPairing ? (
@@ -299,6 +327,7 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
           </p>
         ) : null}
 
+        {session?.error_message ? <p className="text-sm text-danger">{session.error_message}</p> : null}
         {error ? <p className="text-sm text-danger">{error}</p> : null}
 
         <div className="flex flex-wrap gap-2">
@@ -310,7 +339,7 @@ export function WhatsAppConnection({ start = false }: { start?: boolean }) {
             <Button
               variant="secondary"
               isDisabled={pending}
-              onPress={() => run(syncChats)}
+              onPress={() => session && run(() => syncChats(session.id))}
             >
               Volver a sincronizar
             </Button>

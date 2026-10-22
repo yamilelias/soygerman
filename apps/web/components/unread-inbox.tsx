@@ -11,16 +11,16 @@ import type { Chat, ChatPreviewMessage } from "@/lib/types";
 
 const REFRESH_KEY = "soygerman-unread-refresh";
 const REFRESH_WINDOW_MS = 15000;
-let refreshedAt = 0;
-let refreshInFlight: Promise<void> | null = null;
+const refreshedAt = new Map<string, number>();
+const refreshInFlight = new Map<string, Promise<void>>();
 
-function recentlyRefreshed() {
+function recentlyRefreshed(sessionId: string) {
   const now = Date.now();
-  if (now - refreshedAt < REFRESH_WINDOW_MS) return true;
+  if (now - (refreshedAt.get(sessionId) ?? 0) < REFRESH_WINDOW_MS) return true;
   try {
-    const last = Number(window.sessionStorage.getItem(REFRESH_KEY) || 0);
+    const last = Number(window.sessionStorage.getItem(`${REFRESH_KEY}-${sessionId}`) || 0);
     if (now - last < REFRESH_WINDOW_MS) {
-      refreshedAt = last;
+      refreshedAt.set(sessionId, last);
       return true;
     }
   } catch {
@@ -29,19 +29,19 @@ function recentlyRefreshed() {
   return false;
 }
 
-function markRefreshed() {
-  refreshedAt = Date.now();
+function markRefreshed(sessionId: string) {
+  refreshedAt.set(sessionId, Date.now());
   try {
-    window.sessionStorage.setItem(REFRESH_KEY, String(refreshedAt));
+    window.sessionStorage.setItem(`${REFRESH_KEY}-${sessionId}`, String(refreshedAt.get(sessionId)));
   } catch {
     return;
   }
 }
 
-function forgetRefresh() {
-  refreshedAt = 0;
+function forgetRefresh(sessionId: string) {
+  refreshedAt.delete(sessionId);
   try {
-    window.sessionStorage.removeItem(REFRESH_KEY);
+    window.sessionStorage.removeItem(`${REFRESH_KEY}-${sessionId}`);
   } catch {
     return;
   }
@@ -50,9 +50,11 @@ function forgetRefresh() {
 export function UnreadInbox({
   chats,
   total,
+  sessionId,
 }: {
   chats: Chat[];
   total: number;
+  sessionId: string;
 }) {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
@@ -77,22 +79,23 @@ export function UnreadInbox({
   );
 
   useEffect(() => {
-    if (recentlyRefreshed() || refreshInFlight) return;
+    if (recentlyRefreshed(sessionId) || refreshInFlight.has(sessionId)) return;
     setRefreshing(true);
-    refreshInFlight = refreshUnread()
+    const request = refreshUnread()
       .then((result) => {
         if (result && "error" in result) {
-          forgetRefresh();
+          forgetRefresh(sessionId);
           return;
         }
-        markRefreshed();
+        markRefreshed(sessionId);
         router.refresh();
       })
       .finally(() => {
-        refreshInFlight = null;
+        refreshInFlight.delete(sessionId);
         setRefreshing(false);
       });
-  }, [router]);
+    refreshInFlight.set(sessionId, request);
+  }, [router, sessionId]);
 
   function dismiss(chat: Chat) {
     setError(null);
