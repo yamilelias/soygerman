@@ -1,6 +1,6 @@
 # Activar dos teléfonos sin perder la línea actual
 
-Estado al 2026-10-22: código y migraciones en `main`; sin aplicar en Supabase ni desplegar. `MULTI_PHONE_ENABLED` queda en `false` si no se configura. La CLI local apunta a otra organización. El conector de Supabase devolvió «You do not have permission» y PostgreSQL temporal no arrancó en el sandbox por memoria compartida; **falta probar el SQL contra una base accesible antes de producción**.
+Estado al 2026-10-22: código y migraciones en `main`; sin aplicar en Supabase ni desplegar. `MULTI_PHONE_ENABLED` queda en `false` si no se configura. La CLI local apunta a otra organización y el conector de Supabase devolvió «You do not have permission». Las dos migraciones pasaron en PostgreSQL 14 local con datos ficticios: backfill y escrituras antiguas, mismo JID en dos líneas, rechazo de agenda cruzada y reclamo único. **Falta comparar el esquema remoto y probar contra el proyecto correcto antes de producción**.
 
 ## 1. Preflight
 
