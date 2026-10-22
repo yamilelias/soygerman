@@ -19,6 +19,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
 
     steps:
       - uses: actions/checkout@v4
@@ -34,11 +35,34 @@ jobs:
             exit 1
           fi
 
+      - name: Verify IPv4 pooler URL
+        run: |
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          url = os.environ.get("SUPABASE_DB_URL", "")
+          if not url:
+              raise SystemExit("::error::Configure SUPABASE_DB_URL in the Production environment.")
+
+          connection = urlparse(url)
+          if (
+              connection.scheme not in ("postgres", "postgresql")
+              or not (connection.hostname or "").endswith(".pooler.supabase.com")
+              or connection.port != 5432
+              or connection.username != "postgres.nbwxmkcwzqqxvxxfqqpn"
+              or connection.path != "/postgres"
+              or not connection.password
+              or connection.password == "[YOUR-PASSWORD]"
+          ):
+              raise SystemExit("::error::SUPABASE_DB_URL must be the SoyGerman Session pooler URL on port 5432.")
+          PY
+
       - name: Link production project
         run: supabase link --project-ref nbwxmkcwzqqxvxxfqqpn
 
       - name: Preview pending migrations
-        run: supabase db push --dry-run
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --dry-run
 
       - name: Apply pending migrations
-        run: supabase db push --yes
+        run: supabase db push --db-url "$SUPABASE_DB_URL" --yes
