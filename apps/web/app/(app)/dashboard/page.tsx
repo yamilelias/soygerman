@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { UnreadInbox } from "@/components/unread-inbox";
 import { formatDateTime } from "@/lib/format";
-import type { Chat, DailyDigest, DigestItem, ScheduledMessage } from "@/lib/types";
+import type { Chat, DailyDigest, ScheduledMessage } from "@/lib/types";
 import { currentWeekInMexico, formatWeekRange, mexicoDateString } from "@/lib/week";
 import { createClient } from "@/utils/supabase/server";
 
@@ -62,9 +62,6 @@ export default async function DashboardPage() {
   const unread = (unreadResult.data ?? []) as Chat[];
   const unreadCount = unreadResult.count ?? unread.length;
   const digest = (digestResult.data ?? null) as DailyDigest | null;
-  const digestItems = Array.isArray(digest?.items)
-    ? (digest.items as DigestItem[])
-    : [];
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
@@ -77,7 +74,7 @@ export default async function DashboardPage() {
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Para hoy</h2>
-        <TodayDigest digest={digest} items={digestItems} />
+        <TodayDigest digest={digest} />
       </section>
 
       <UnreadInbox chats={unread} total={unreadCount} />
@@ -135,13 +132,7 @@ export default async function DashboardPage() {
   );
 }
 
-function TodayDigest({
-  digest,
-  items,
-}: {
-  digest: DailyDigest | null;
-  items: DigestItem[];
-}) {
+function TodayDigest({ digest }: { digest: DailyDigest | null }) {
   if (!digest) {
     return (
       <p className="text-sm text-muted">El resumen sale a las 6:00.</p>
@@ -177,31 +168,6 @@ function TodayDigest({
       {digest.overview ? (
         <p className="whitespace-pre-wrap text-sm">{digest.overview}</p>
       ) : null}
-      {items.length === 0 ? (
-        <p className="text-sm text-muted">
-          No hay actividades pendientes en los chats sin leer.
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {items.map((item) => (
-            <li
-              key={item.chat_id}
-              className="flex flex-col gap-3 rounded-lg border border-separator p-4 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div className="min-w-0">
-                <p className="font-medium">{item.name}</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm">{item.action}</p>
-              </div>
-              <Link
-                href={`/schedule?chat=${item.chat_id}`}
-                className="shrink-0 text-sm font-medium"
-              >
-                Agendar
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
