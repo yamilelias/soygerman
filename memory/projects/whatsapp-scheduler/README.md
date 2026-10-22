@@ -4,6 +4,8 @@ La iniciativa activa de este repositorio.
 
 Estado: activo. La web y el worker están en producción. El worker ya no abre Chromium. La vinculación de `yamileliassoto@gmail.com` del 2026-10-01 se quedó en `qr_ready` porque el navegador no cabía en 512 MB. Hay que escanear el QR otra vez. El recorrido completo (sync, agenda, cancelar y cron) sigue sin cerrarse. El diagnóstico viejo está en `memory/references/sops/whatsapp-linking.md`.
 
+El 2026-10-22 se implementó en el repositorio el soporte de dos teléfonos, pendiente de migrar, desplegar y probar en producción. El procedimiento de activación está en `memory/references/sops/multi-phone-rollout.md`.
+
 ## Hecho
 
 - Monorepo, esquema de Supabase, worker, pantallas y PWA.
