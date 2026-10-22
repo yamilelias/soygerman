@@ -2,6 +2,8 @@
 
 Estado al 2026-10-22: código y migraciones en `main`; sin aplicar en Supabase ni desplegar. `MULTI_PHONE_ENABLED` queda en `false` si no se configura. La CLI local apunta a otra organización y el conector de Supabase devolvió «You do not have permission». Las dos migraciones pasaron en PostgreSQL 14 local con datos ficticios: backfill y escrituras antiguas, mismo JID en dos líneas, rechazo de agenda cruzada y reclamo único. **Falta comparar el esquema remoto y probar contra el proyecto correcto antes de producción**.
 
+La decisión del 2026-10-22 en `memory/decisions/log.md` sustituye las etapas 2 y 3 de esta guía: el primer `supabase db push` del GitHub Action aplicará ambas migraciones pendientes juntas. Antes del primer push, confirmar que el worker desplegado ya usa `session_id` y `claim_due_messages_v2`, y comparar el historial y esquema remotos con los archivos locales. Mantener `MULTI_PHONE_ENABLED=false` hasta completar la prueba de la segunda línea. Conservar las comprobaciones de la línea actual y la vuelta atrás descritas abajo.
+
 ## 1. Preflight
 
 Usar el proyecto `nbwxmkcwzqqxvxxfqqpn`. Comparar el esquema real con las migraciones: tablas `whatsapp_sessions`, `whatsapp_auth_files`, `chats`, `scheduled_messages`, `daily_digests`; restricciones `whatsapp_sessions_user_id_key`, `chats_user_id_wa_id_key`, `whatsapp_auth_files_pkey`, `daily_digests_user_id_digest_date_key`; RPC `claim_due_messages(integer)` y publicación Realtime. Guardar conteos e IDs de sesiones, chats y mensajes antes de modificar datos. Confirmar que no hay cambios remotos que falten en git.
