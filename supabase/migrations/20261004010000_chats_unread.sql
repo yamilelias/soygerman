@@ -11,6 +11,10 @@ ALTER TABLE public.chats
 ALTER TABLE public.chats
   ADD CONSTRAINT chats_unread_count_nonnegative CHECK (unread_count >= 0);
 
+DROP INDEX IF EXISTS public.chats_open_unread_idx;
+
 CREATE INDEX chats_open_unread_idx
   ON public.chats (user_id, unread_since)
-  WHERE hidden = false AND (unread_count > 0 OR marked_unread);
+  WHERE hidden = false
+    AND archived = false
+    AND (unread_count > 0 OR marked_unread);
