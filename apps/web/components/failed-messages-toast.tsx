@@ -61,7 +61,7 @@ export function FailedMessagesToast({
   return (
     <div
       role="alert"
-      className="fixed inset-x-4 top-4 z-50 mx-auto flex max-w-lg items-start gap-3 rounded-lg border border-danger bg-background p-3 shadow-lg"
+      className="failed-messages-toast fixed inset-x-4 top-4 z-50 mx-auto flex max-w-lg items-start gap-3 rounded-lg border border-danger bg-background p-3 shadow-lg"
     >
       <AlertCircle className="mt-0.5 shrink-0 text-danger" size={20} aria-hidden />
       <button

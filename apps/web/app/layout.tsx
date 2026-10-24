@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { DM_Sans, Montserrat } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { RegisterPwa } from "@/components/register-pwa";
+import { IosPullToRefresh } from "@/components/ios-pull-to-refresh";
 import { Providers } from "./providers";
 import "./globals.css";
 
@@ -65,6 +66,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full bg-background text-foreground">
         <RegisterPwa />
+        <IosPullToRefresh />
         <Providers>{children}</Providers>
         <Analytics />
       </body>

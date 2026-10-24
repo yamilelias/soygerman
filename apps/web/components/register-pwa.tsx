@@ -2,22 +2,45 @@
 
 import { useEffect } from "react";
 
-type WorkboxWindow = Window & {
-  workbox?: { register: () => Promise<unknown> };
-};
-
 export function RegisterPwa() {
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
 
-    const workbox = (window as WorkboxWindow).workbox;
-    if (workbox) {
-      void workbox.register();
-      return;
-    }
+    let registration: ServiceWorkerRegistration | undefined;
+    let hadController = Boolean(navigator.serviceWorker.controller);
+    let reloading = false;
 
-    void navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    const onControllerChange = () => {
+      if (hadController && !reloading) {
+        reloading = true;
+        window.location.reload();
+      }
+      hadController = true;
+    };
+
+    const checkForUpdate = () => {
+      if (document.visibilityState === "visible") {
+        void registration?.update().catch(() => {});
+      }
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+    document.addEventListener("visibilitychange", checkForUpdate);
+    window.addEventListener("pageshow", checkForUpdate);
+
+    void navigator.serviceWorker.register("/sw.js", { scope: "/" })
+      .then((registered) => {
+        registration = registered;
+        checkForUpdate();
+      })
+      .catch(() => {});
+
+    return () => {
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+      document.removeEventListener("visibilitychange", checkForUpdate);
+      window.removeEventListener("pageshow", checkForUpdate);
+    };
   }, []);
 
   return null;

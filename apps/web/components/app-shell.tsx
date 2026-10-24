@@ -47,7 +47,7 @@ export function AppShell({ children, lines, activeId }: {
 
   return (
     <div className="min-h-full md:grid md:grid-cols-[240px_1fr]">
-      <aside className="sticky top-0 hidden h-screen shrink-0 flex-col gap-6 self-start border-r border-separator p-4 md:flex">
+      <aside className="app-desktop-sidebar sticky top-0 hidden h-screen shrink-0 flex-col gap-6 self-start border-r border-separator p-4 md:flex">
         <Link href="/dashboard" className="flex items-center gap-3">
           <Image src="/logo.png" alt="" width={40} height={40} />
           <p className="text-lg font-semibold">SoyGerman</p>
@@ -109,7 +109,7 @@ export function AppShell({ children, lines, activeId }: {
         <main className="flex-1 px-4 py-6 pb-24 md:pb-6">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-20 flex border-t border-separator bg-background md:hidden">
+      <nav className="app-mobile-nav fixed inset-x-0 bottom-0 z-20 flex border-t border-separator bg-background md:hidden">
         {mobileLinks.map((link) => {
           const Icon = link.icon;
           const active = isActive(pathname, link.href);

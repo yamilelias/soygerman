@@ -42,7 +42,7 @@ export function LandingPage({ loggedIn }: { loggedIn: boolean }) {
       className="min-h-dvh scroll-smooth bg-white text-[#1C1C1C]"
       style={{ colorScheme: "light" }}
     >
-      <header className="sticky top-0 z-30 border-b border-[#1C1C1C]/10 bg-white">
+      <header className="pwa-sticky-header sticky top-0 z-30 border-b border-[#1C1C1C]/10 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3">
           <a href="#inicio" className="flex items-center gap-2.5">
             <Image
