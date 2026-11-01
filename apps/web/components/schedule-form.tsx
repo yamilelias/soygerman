@@ -13,27 +13,33 @@ import {
   TextField,
   TimeField,
 } from "@heroui/react";
-import { getLocalTimeZone, now, type DateValue } from "@internationalized/date";
+import { getLocalTimeZone, now, parseAbsoluteToLocal, type DateValue } from "@internationalized/date";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { searchChats } from "@/app/actions/chats";
-import { scheduleMessage } from "@/app/actions/messages";
+import { editMessage, rescheduleMessage, scheduleMessage } from "@/app/actions/messages";
 import { formatDateTime } from "@/lib/format";
 import { chatLabel } from "@/lib/phone";
-import type { Chat } from "@/lib/types";
+import type { Chat, ScheduledMessage } from "@/lib/types";
 
 function defaultWhen() {
   return now(getLocalTimeZone()).add({ days: 1 });
 }
 
-export function ScheduleForm({ selected }: { selected: Chat | null }) {
+export function ScheduleForm({ selected, message, mode }: {
+  selected: Chat | null;
+  message: ScheduledMessage | null;
+  mode: "new" | "edit" | "copy";
+}) {
   const router = useRouter();
   const [chatId, setChatId] = useState<string | null>(selected?.id ?? null);
   const [input, setInput] = useState(selected ? chatLabel(selected) : "");
   const [options, setOptions] = useState<Chat[]>(selected ? [selected] : []);
   const [searching, setSearching] = useState(false);
-  const [messageBody, setMessageBody] = useState("");
-  const [scheduledAt, setScheduledAt] = useState<DateValue | null>(null);
+  const [messageBody, setMessageBody] = useState(message?.message_body ?? "");
+  const [scheduledAt, setScheduledAt] = useState<DateValue | null>(
+    mode === "edit" && message ? parseAbsoluteToLocal(message.scheduled_at) : null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -90,13 +96,23 @@ export function ScheduleForm({ selected }: { selected: Chat | null }) {
     }
     const when = scheduledAt.toDate(getLocalTimeZone());
     startTransition(async () => {
-      const result = await scheduleMessage({
+      const values = {
         chatId: chatId ?? "",
         messageBody,
         scheduledAt: when.toISOString(),
-      });
+      };
+      const result = mode === "edit" && message
+        ? await editMessage({ ...values, id: message.id })
+        : mode === "copy" && message
+          ? await rescheduleMessage({ ...values, id: message.id })
+          : await scheduleMessage(values);
       if (result.error) {
         setError(result.error);
+        return;
+      }
+      if (mode !== "new") {
+        router.push(mode === "edit" ? "/pending" : "/history");
+        router.refresh();
         return;
       }
       setDone(true);
@@ -125,6 +141,23 @@ export function ScheduleForm({ selected }: { selected: Chat | null }) {
         submit();
       }}
     >
+      {mode !== "new" ? (
+        <div>
+          <h2 className="text-xl font-semibold">
+            {mode === "edit" ? "Editar mensaje pendiente" : "Reagendar mensaje"}
+          </h2>
+          {mode === "copy" ? (
+            <p className="mt-1 text-sm text-muted">
+              Se creará un nuevo pendiente. El intento original queda en el historial.
+            </p>
+          ) : null}
+          {message && !selected ? (
+            <p className="mt-1 text-sm text-muted">
+              El chat original ya no está disponible. Elige otro destino.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       <ComboBox
         fullWidth
         menuTrigger="focus"
@@ -241,7 +274,7 @@ export function ScheduleForm({ selected }: { selected: Chat | null }) {
       ) : null}
 
       <Button type="submit" isDisabled={pending}>
-        {pending ? "Guardando..." : "Agendar mensaje"}
+        {pending ? "Guardando..." : mode === "edit" ? "Guardar cambios" : mode === "copy" ? "Reagendar mensaje" : "Agendar mensaje"}
       </Button>
     </form>
   );

@@ -56,15 +56,20 @@ export function PendingList({ messages }: { messages: ScheduledMessage[] }) {
                 {message.message_body}
               </p>
             </div>
-            <Button
-              variant="danger-soft"
-              onPress={() => {
-                setError(null);
-                setTarget(message);
-              }}
-            >
-              Cancelar mensaje
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="secondary" onPress={() => router.push(`/schedule?edit=${message.id}`)}>
+                Editar
+              </Button>
+              <Button
+                variant="danger-soft"
+                onPress={() => {
+                  setError(null);
+                  setTarget(message);
+                }}
+              >
+                Cancelar mensaje
+              </Button>
+            </div>
           </li>
         ))}
       </ul>
