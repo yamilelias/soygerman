@@ -25,7 +25,7 @@ export default async function DashboardPage() {
   const today = currentDayInMexico();
   const week = currentWeekInMexico();
 
-  const [pendingResult, sentResult, failedResult, unreadResult, digestResult, weekPending] =
+  const [pendingResult, sentResult, failedResult, weekFailedResult, unreadResult, digestResult, weekPending] =
     await Promise.all([
     supabase
       .from("scheduled_messages")
@@ -46,6 +46,13 @@ export default async function DashboardPage() {
       .select("id", { count: "exact", head: true })
       .eq("status", "failed")
       .eq("session_id", line.id),
+    supabase
+      .from("scheduled_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "failed")
+      .eq("session_id", line.id)
+      .gte("scheduled_at", week.start.toISOString())
+      .lt("scheduled_at", week.end.toISOString()),
     supabase
       .from("chats")
       .select(unreadColumns, { count: "exact" })
@@ -154,8 +161,11 @@ export default async function DashboardPage() {
           </p>
         </section>
         <section className="rounded-lg border border-separator p-4">
-          <p className="text-sm text-muted">Fallidos hasta ahora</p>
-          <p className="text-3xl font-semibold">{failedResult.count ?? 0}</p>
+          <p className="text-sm text-muted">Fallidos esta semana</p>
+          <p className="text-3xl font-semibold">{weekFailedResult.count ?? 0}</p>
+          <p className="text-sm text-muted">
+            {formatWeekRange(week.start, week.end)}
+          </p>
         </section>
       </div>
 
