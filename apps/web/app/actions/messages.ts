@@ -172,9 +172,10 @@ export async function rescheduleMessage(input: MessageInput & { id: string }) {
   return { ok: true as const };
 }
 
-export async function rescheduleFutureMessages(ids: string[]) {
-  const uniqueIds = [...new Set(ids)];
+export async function rescheduleFutureMessages(selections: { id: string; chatId?: string }[]) {
+  const uniqueIds = [...new Set(selections.map((selection) => selection.id))];
   if (!uniqueIds.length) return { error: "Selecciona al menos un mensaje" };
+  if (uniqueIds.length !== selections.length) return { error: "Hay mensajes repetidos en la selección" };
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "No autenticado" };
@@ -207,9 +208,20 @@ export async function rescheduleFutureMessages(ids: string[]) {
   if (legacyError) return { error: legacyError.message };
   const byWaId = new Map((chats ?? []).map((chat) => [chat.wa_id, chat]));
   const byId = new Map((legacyChats ?? []).map((chat) => [chat.id, chat]));
+  const chosenIds = [...new Set(selections.map((selection) => selection.chatId).filter((id): id is string => Boolean(id)))];
+  const { data: chosenChats, error: chosenError } = chosenIds.length
+    ? await supabase.from("chats").select("id, wa_id, name")
+      .eq("session_id", line.id).eq("hidden", false).in("id", chosenIds)
+    : { data: [], error: null };
+  if (chosenError) return { error: chosenError.message };
+  if (chosenChats?.length !== chosenIds.length) return { error: "Una conversación elegida ya no está disponible" };
+  const chosenById = new Map((chosenChats ?? []).map((chat) => [chat.id, chat]));
+  const selectionsById = new Map(selections.map((selection) => [selection.id, selection]));
   const rows = originals.map((message) => {
-    const chat = message.destination_wa_id ? byWaId.get(message.destination_wa_id) :
-      message.chat_id ? byId.get(message.chat_id) : null;
+    const chosenId = selectionsById.get(message.id)?.chatId;
+    const chat = chosenId ? chosenById.get(chosenId) :
+      message.destination_wa_id ? byWaId.get(message.destination_wa_id) :
+        message.chat_id ? byId.get(message.chat_id) : null;
     return chat ? {
       user_id: user.id,
       session_id: line.id,
