@@ -4,6 +4,10 @@ import { activeLine } from "@/lib/lines";
 import { createClient } from "@/utils/supabase/server";
 import type { ScheduledMessage } from "@/lib/types";
 
+function currentTime() {
+  return Date.now();
+}
+
 export default async function SchedulePage({
   searchParams,
 }: {
@@ -19,7 +23,7 @@ export default async function SchedulePage({
     searchChats({ pageSize: 1 }),
     messageId && line
       ? supabase.from("scheduled_messages")
-        .select("id, user_id, session_id, sender_phone_number, chat_id, message_body, scheduled_at, status, error_message, created_at")
+        .select("id, user_id, session_id, sender_phone_number, chat_id, destination_wa_id, destination_name, message_body, scheduled_at, status, error_message, created_at")
         .eq("id", messageId).eq("session_id", line.id).maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
@@ -27,9 +31,14 @@ export default async function SchedulePage({
   const mode = params.edit ? "edit" : params.copy ? "copy" : "new";
   const validMessage = message && (
     (mode === "edit" && message.status === "pending") ||
-    (mode === "copy" && (message.status === "failed" || message.status === "sent"))
+    (mode === "copy" && (message.status === "failed" || message.status === "sent" || message.status === "cancelled"))
   ) ? message : null;
   const selected = await getChat(validMessage?.chat_id ?? chatId);
+  const recovered = !selected && validMessage?.destination_wa_id && line
+    ? await supabase.from("chats").select("id").eq("session_id", line.id)
+      .eq("wa_id", validMessage.destination_wa_id).eq("hidden", false).maybeSingle()
+    : null;
+  const destination = selected ?? (recovered?.data ? await getChat(recovered.data.id) : null);
 
   return (
     <div className="w-full max-w-xl">
@@ -41,7 +50,8 @@ export default async function SchedulePage({
           llega sola.
         </p>
       ) : (
-        <ScheduleForm key={`${line?.id}-${messageId}`} selected={selected} message={validMessage} mode={mode} />
+        <ScheduleForm key={`${line?.id}-${messageId}`} selected={destination} message={validMessage} mode={mode}
+          copyFuture={mode === "copy" && Boolean(validMessage && new Date(validMessage.scheduled_at).getTime() > currentTime())} />
       )}
     </div>
   );

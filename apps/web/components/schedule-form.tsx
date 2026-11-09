@@ -26,10 +26,11 @@ function defaultWhen() {
   return now(getLocalTimeZone()).add({ days: 1 });
 }
 
-export function ScheduleForm({ selected, message, mode }: {
+export function ScheduleForm({ selected, message, mode, copyFuture = false }: {
   selected: Chat | null;
   message: ScheduledMessage | null;
   mode: "new" | "edit" | "copy";
+  copyFuture?: boolean;
 }) {
   const router = useRouter();
   const [chatId, setChatId] = useState<string | null>(selected?.id ?? null);
@@ -38,7 +39,8 @@ export function ScheduleForm({ selected, message, mode }: {
   const [searching, setSearching] = useState(false);
   const [messageBody, setMessageBody] = useState(message?.message_body ?? "");
   const [scheduledAt, setScheduledAt] = useState<DateValue | null>(
-    mode === "edit" && message ? parseAbsoluteToLocal(message.scheduled_at) : null,
+    message && (mode === "edit" || (mode === "copy" && copyFuture))
+      ? parseAbsoluteToLocal(message.scheduled_at) : null,
   );
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);

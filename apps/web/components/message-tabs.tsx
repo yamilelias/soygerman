@@ -20,7 +20,7 @@ const tabs = [
     id: "/history",
     label: "Historial",
     description:
-      "Mensajes enviados, fallidos y cancelados. Reagendar un enviado o un fallido crea una copia y deja el original en el historial.",
+      "Mensajes enviados, fallidos y cancelados. Reagendar crea una copia y deja el original en el historial.",
   },
 ];
 

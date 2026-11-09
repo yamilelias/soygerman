@@ -23,10 +23,10 @@ function validateMessage(input: MessageInput) {
 
 async function validateChat(chatId: string, lineId: string) {
   const supabase = await createClient();
-  const { data: chat } = await supabase.from("chats").select("id")
+  const { data: chat } = await supabase.from("chats").select("id, wa_id, name")
     .eq("id", chatId).eq("session_id", lineId).eq("hidden", false)
     .maybeSingle();
-  return Boolean(chat);
+  return chat;
 }
 
 export async function scheduleMessage(input: MessageInput) {
@@ -41,7 +41,8 @@ export async function scheduleMessage(input: MessageInput) {
 
   const line = await activeLine();
   if (!line) return { error: "No hay teléfono activo" };
-  if (!await validateChat(input.chatId, line.id)) {
+  const chat = await validateChat(input.chatId, line.id);
+  if (!chat) {
     return { error: "El chat no pertenece al teléfono activo" };
   }
 
@@ -49,6 +50,8 @@ export async function scheduleMessage(input: MessageInput) {
     user_id: user.id,
     session_id: line.id,
     chat_id: input.chatId,
+    destination_wa_id: chat.wa_id,
+    destination_name: chat.name,
     message_body: validated.body,
     scheduled_at: validated.scheduledAt!.toISOString(),
     status: "pending",
@@ -69,13 +72,16 @@ export async function editMessage(input: MessageInput & { id: string }) {
   if (!user) return { error: "No autenticado" };
   const line = await activeLine();
   if (!line) return { error: "No hay teléfono activo" };
-  if (!await validateChat(input.chatId, line.id)) {
+  const chat = await validateChat(input.chatId, line.id);
+  if (!chat) {
     return { error: "El chat no pertenece al teléfono activo" };
   }
 
   const { data, error } = await supabase.from("scheduled_messages")
     .update({
       chat_id: input.chatId,
+      destination_wa_id: chat.wa_id,
+      destination_name: chat.name,
       message_body: validated.body,
       scheduled_at: validated.scheduledAt!.toISOString(),
     })
@@ -127,7 +133,7 @@ export async function rescheduleMessage(input: MessageInput & { id: string }) {
 
   const { data: original, error: readError } = await supabase
     .from("scheduled_messages")
-    .select("status, session_id")
+    .select("status, session_id, scheduled_at")
     .eq("id", input.id)
     .eq("user_id", user.id)
     .eq("session_id", line.id)
@@ -135,28 +141,100 @@ export async function rescheduleMessage(input: MessageInput & { id: string }) {
 
   if (readError) return { error: readError.message };
   if (!original) return { error: "No se encontró el mensaje" };
-  if (original.status !== "sent" && original.status !== "failed") {
-    return { error: "Solo se puede reagendar un mensaje enviado o fallido" };
+  if (original.status !== "sent" && original.status !== "failed" && original.status !== "cancelled") {
+    return { error: "Solo se puede reagendar un mensaje enviado, fallido o cancelado" };
   }
-  if (!await validateChat(input.chatId, line.id)) {
+  const chat = await validateChat(input.chatId, line.id);
+  if (!chat) {
     return { error: "El chat no pertenece al teléfono activo" };
   }
 
-  const { error } = await supabase.from("scheduled_messages").insert({
+  const sourceId = original.status !== "sent" && new Date(original.scheduled_at).getTime() > Date.now()
+    ? input.id : null;
+  const { error, count } = await supabase.from("scheduled_messages").upsert({
     user_id: user.id,
     session_id: original.session_id,
     chat_id: input.chatId,
+    destination_wa_id: chat.wa_id,
+    destination_name: chat.name,
     message_body: validated.body,
     scheduled_at: validated.scheduledAt!.toISOString(),
     status: "pending",
-  });
+    rescheduled_from_id: sourceId,
+  }, { onConflict: "user_id,rescheduled_from_id", ignoreDuplicates: true, count: "exact" });
 
   if (error) return { error: error.message };
+  if (sourceId && count === 0) return { error: "Este mensaje ya está reagendado" };
 
   revalidatePath("/pending");
   revalidatePath("/history");
   revalidatePath("/dashboard");
   return { ok: true as const };
+}
+
+export async function rescheduleFutureMessages(ids: string[]) {
+  const uniqueIds = [...new Set(ids)];
+  if (!uniqueIds.length) return { error: "Selecciona al menos un mensaje" };
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "No autenticado" };
+  const line = await activeLine();
+  if (!line) return { error: "No hay teléfono activo" };
+
+  const { data: originals, error: readError } = await supabase
+    .from("scheduled_messages")
+    .select("id, chat_id, message_body, scheduled_at, status, destination_wa_id")
+    .in("id", uniqueIds).eq("user_id", user.id).eq("session_id", line.id);
+  if (readError) return { error: readError.message };
+  const currentTime = Date.now();
+  if (originals?.length !== uniqueIds.length || originals.some((message) =>
+    (message.status !== "failed" && message.status !== "cancelled") ||
+    new Date(message.scheduled_at).getTime() <= currentTime
+  )) return { error: "Uno de los mensajes ya no se puede reagendar. Actualiza el historial." };
+
+  const waIds = [...new Set(originals.map((message) => message.destination_wa_id).filter((id): id is string => Boolean(id)))];
+  const { data: chats, error: chatError } = waIds.length
+    ? await supabase.from("chats").select("id, wa_id, name")
+      .eq("session_id", line.id).eq("hidden", false).in("wa_id", waIds)
+    : { data: [], error: null };
+  if (chatError) return { error: chatError.message };
+  const legacyIds = originals.filter((message) => !message.destination_wa_id && message.chat_id)
+    .map((message) => message.chat_id as string);
+  const { data: legacyChats, error: legacyError } = legacyIds.length
+    ? await supabase.from("chats").select("id, wa_id, name")
+      .eq("session_id", line.id).eq("hidden", false).in("id", legacyIds)
+    : { data: [], error: null };
+  if (legacyError) return { error: legacyError.message };
+  const byWaId = new Map((chats ?? []).map((chat) => [chat.wa_id, chat]));
+  const byId = new Map((legacyChats ?? []).map((chat) => [chat.id, chat]));
+  const rows = originals.map((message) => {
+    const chat = message.destination_wa_id ? byWaId.get(message.destination_wa_id) :
+      message.chat_id ? byId.get(message.chat_id) : null;
+    return chat ? {
+      user_id: user.id,
+      session_id: line.id,
+      chat_id: chat.id,
+      destination_wa_id: chat.wa_id,
+      destination_name: chat.name,
+      message_body: message.message_body,
+      scheduled_at: message.scheduled_at,
+      status: "pending",
+      rescheduled_from_id: message.id,
+    } : null;
+  });
+  if (rows.some((row) => !row)) return { error: "Una conversación ya no está disponible. Reagéndala individualmente y elige un destino." };
+
+  const { error, count } = await supabase.from("scheduled_messages")
+    .upsert(rows.filter((row) => row !== null), {
+      onConflict: "user_id,rescheduled_from_id",
+      ignoreDuplicates: true,
+      count: "exact",
+    });
+  if (error) return { error: error.message };
+  revalidatePath("/pending");
+  revalidatePath("/history");
+  revalidatePath("/dashboard");
+  return { count: count ?? 0 };
 }
 
 export async function countFailedMessages() {

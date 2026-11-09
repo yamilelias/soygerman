@@ -77,6 +77,9 @@ export type ScheduledMessage = {
   chat_id: string | null;
   sender_phone_number: string | null;
   message_body: string;
+  destination_wa_id?: string | null;
+  destination_name?: string | null;
+  rescheduled_from_id?: string | null;
   scheduled_at: string;
   status: MessageStatus;
   error_message: string | null;
