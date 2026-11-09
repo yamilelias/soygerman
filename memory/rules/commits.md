@@ -7,6 +7,6 @@ Un solo tema: cómo queda el historial.
 - `memory/` y `AGENTS.md` van en su propio commit, antes de seguir con código. `memory/local.md` no entra en git.
 - No metas archivos que ya estaban modificados y no son de esta tarea.
 - El mensaje va en español y dice por qué, en una o dos frases.
-- El commit es local. El push espera un pedido explícito.
+- Al cerrar una tarea, haz push de sus commits a `origin` después de verificar la compilación de la aplicación afectada.
 - Antes de publicar, compila la aplicación que toca el cambio. En la web es `npm run build` dentro de `apps/web`. Si no compila, no se manda.
 - No uses `--no-verify`, no reescribas historia ya publicada y no hagas force push.

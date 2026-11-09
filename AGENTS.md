@@ -47,6 +47,8 @@ Cada cambio que termines se commitea en ese momento. El historial local es la co
 
 Los commits son atómicos. Una tarea puede dejar varios: uno con la funcionalidad y otro con la documentación o la memoria. El detalle está en `memory/rules/commits.md`.
 
+Al cerrar una tarea, haz push de sus commits a `origin` después de verificar que compila la aplicación afectada.
+
 ## Mantenimiento
 
 - Cada mes: revisa `memory/context/current-priorities.md`.
