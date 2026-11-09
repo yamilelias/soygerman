@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, Modal } from "@heroui/react";
+import { Ban, Pencil } from "lucide-react";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { cancelMessage } from "@/app/actions/messages";
@@ -42,7 +43,7 @@ export function PendingList({ messages }: { messages: ScheduledMessage[] }) {
             key={message.id}
             className="flex flex-col gap-3 rounded-lg border border-separator p-4 sm:flex-row sm:items-start sm:justify-between"
           >
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="font-medium">
                 {message.chats?.name ?? "Chat eliminado"}
               </p>
@@ -56,18 +57,27 @@ export function PendingList({ messages }: { messages: ScheduledMessage[] }) {
                 {message.message_body}
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onPress={() => router.push(`/schedule?edit=${message.id}`)}>
-                Editar
+            <div className="flex shrink-0 gap-1">
+              <Button
+                isIconOnly
+                size="sm"
+                variant="secondary"
+                aria-label={`Editar mensaje para ${message.chats?.name ?? "chat eliminado"}`}
+                onPress={() => router.push(`/schedule?edit=${message.id}`)}
+              >
+                <Pencil size={16} aria-hidden />
               </Button>
               <Button
+                isIconOnly
+                size="sm"
                 variant="danger-soft"
+                aria-label={`Cancelar mensaje para ${message.chats?.name ?? "chat eliminado"}`}
                 onPress={() => {
                   setError(null);
                   setTarget(message);
                 }}
               >
-                Cancelar mensaje
+                <Ban size={16} aria-hidden />
               </Button>
             </div>
           </li>
@@ -77,7 +87,7 @@ export function PendingList({ messages }: { messages: ScheduledMessage[] }) {
       <Modal
         isOpen={target !== null}
         onOpenChange={(open) => {
-          if (!open) setTarget(null);
+          if (!open && !pending) setTarget(null);
         }}
       >
         <Modal.Backdrop>
@@ -88,13 +98,14 @@ export function PendingList({ messages }: { messages: ScheduledMessage[] }) {
               </Modal.Header>
               <Modal.Body>
                 <p>
-                  El worker no enviará este mensaje. Esta acción no se puede
-                  deshacer.
+                  ¿Quieres cancelar el mensaje para {target?.chats?.name ?? "este chat"}
+                  {target ? ` programado para el ${formatDateTime(target.scheduled_at)}` : ""}?
+                  Esta acción no se puede deshacer.
                 </p>
                 {error ? <p className="mt-2 text-sm text-danger">{error}</p> : null}
               </Modal.Body>
               <Modal.Footer>
-                <Button variant="ghost" onPress={() => setTarget(null)}>
+                <Button variant="ghost" isDisabled={pending} onPress={() => setTarget(null)}>
                   Volver
                 </Button>
                 <Button
@@ -102,7 +113,7 @@ export function PendingList({ messages }: { messages: ScheduledMessage[] }) {
                   isDisabled={pending}
                   onPress={confirm}
                 >
-                  {pending ? "Cancelando..." : "Confirmar"}
+                  {pending ? "Cancelando..." : "Sí, cancelar mensaje"}
                 </Button>
               </Modal.Footer>
             </Modal.Dialog>
