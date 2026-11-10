@@ -6,7 +6,7 @@ PWA para agendar mensajes de WhatsApp. Un worker con sesión persistente los env
 
 - `apps/web`: Next.js 16.3.6, React 19, Tailwind 4, HeroUI 3.2.6, Supabase (`@supabase/ssr`), PWA con `@ducanh2912/next-pwa`. El manifiesto abre en `/dashboard`, trae iconos de 192 y 512, y en producción se registra `/sw.js`. En el iPhone hace falta la meta `apple-mobile-web-app-capable` para añadirlo a la pantalla de inicio.
 - `apps/worker`: Express, Baileys 7.0.0-rc14, `node-cron`, cliente de Supabase con service role.
-- `supabase/migrations/20260928120000_init.sql`: esquema aplicado en el proyecto remoto. Las migraciones `20261022120000_multi_phone_expand.sql` y `20261022130000_multi_phone_enable.sql` están en el repositorio, pendientes de validar y aplicar en producción por etapas.
+- `supabase/migrations/20260928120000_init.sql`: esquema inicial aplicado en el proyecto remoto. Las migraciones `20261022120000_multi_phone_expand.sql` y `20261022130000_multi_phone_enable.sql` se aplicaron en producción el 2026-10-22 mediante GitHub Actions; el workflow del 2026-11-09 confirmó que la base remota está al día. Sigue pendiente la prueba real de dos teléfonos y la medición de RAM antes de habilitar la segunda línea.
 
 Workspaces npm en la raíz: `dev:web`, `dev:worker`, `build:web`, `start:worker`.
 
