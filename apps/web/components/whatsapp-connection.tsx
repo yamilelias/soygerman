@@ -67,13 +67,20 @@ export function WhatsAppConnection({ start = false, initialSession = null }: {
   const resumed = useRef(false);
   const previousStatus = useRef<WhatsAppSessionStatus | null>(null);
   const syncedStamp = useRef<string | null>(null);
+  const pairingRef = useRef(false);
+
+  useEffect(() => {
+    pairingRef.current = linking || Boolean(session && PAIRING_STATUSES.includes(session.status));
+  }, [linking, session]);
 
   useEffect(() => {
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let polling = false;
     let active = true;
 
-    async function readSession(userId: string) {
+    async function readSession(userId: string, quiet = false) {
       const { data, error } = await supabase
         .from("whatsapp_sessions")
         .select("id, user_id, slot, label, phone_number, error_message, status, qr_code_base64, updated_at")
@@ -82,7 +89,7 @@ export function WhatsAppConnection({ start = false, initialSession = null }: {
         .maybeSingle();
       if (!active) return;
       if (error) {
-        setError(error.message);
+        if (!quiet) setError(error.message);
         return;
       }
       setSession(data as WhatsAppSession | null);
@@ -99,7 +106,8 @@ export function WhatsAppConnection({ start = false, initialSession = null }: {
       }
 
       await readSession(user.id);
-      if (active) setLoading(false);
+      if (!active) return;
+      setLoading(false);
 
       channel = supabase
         .channel(`whatsapp-session-${user.id}`)
@@ -124,12 +132,19 @@ export function WhatsAppConnection({ start = false, initialSession = null }: {
         .subscribe((status) => {
           if (status === "SUBSCRIBED") void readSession(user.id);
         });
+
+      pollTimer = setInterval(() => {
+        if (!pairingRef.current || polling) return;
+        polling = true;
+        void readSession(user.id, true).finally(() => { polling = false; });
+      }, 3000);
     }
 
     void load();
 
     return () => {
       active = false;
+      if (pollTimer) clearInterval(pollTimer);
       if (channel) supabase.removeChannel(channel);
     };
   }, [initialSessionId]);
