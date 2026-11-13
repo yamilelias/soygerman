@@ -2,8 +2,11 @@
 
 import { Button, Card, Input, Label, TextField } from "@heroui/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+
+const CODE_LENGTH = 8;
+const RESEND_DELAY_MS = 30_000;
 
 function accessMessage(message: string) {
   const text = message.toLowerCase();
@@ -25,6 +28,21 @@ export function LoginForm({ authError }: { authError: boolean }) {
   const [sendError, setSendError] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [resendAt, setResendAt] = useState(0);
+  const [secondsUntilResend, setSecondsUntilResend] = useState(0);
+
+  useEffect(() => {
+    if (!sent || !resendAt) return;
+    const updateCountdown = () => {
+      setSecondsUntilResend(Math.max(0, Math.ceil((resendAt - Date.now()) / 1000)));
+    };
+    updateCountdown();
+    const interval = window.setInterval(() => {
+      updateCountdown();
+      if (Date.now() >= resendAt) window.clearInterval(interval);
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [sent, resendAt]);
 
   async function submit() {
     setSendError(null);
@@ -45,6 +63,8 @@ export function LoginForm({ authError }: { authError: boolean }) {
     }
     setCode("");
     setCodeError(null);
+    setResendAt(Date.now() + RESEND_DELAY_MS);
+    setSecondsUntilResend(30);
     setSent(true);
   }
 
@@ -66,56 +86,19 @@ export function LoginForm({ authError }: { authError: boolean }) {
     router.refresh();
   }
 
-  return (
-    <Card className="w-full max-w-md">
-      <Card.Header>
-        <Card.Title>{sent ? "Revisa tu correo" : "Entrar"}</Card.Title>
-        <Card.Description>
-          Escribe el correo con el que te invitaron. Puedes entrar con el código
-          en esta ventana o con el enlace del correo.
-        </Card.Description>
-      </Card.Header>
-      <Card.Content>
-        <div className="flex flex-col gap-6">
+  if (sent) {
+    return (
+      <Card className="w-full max-w-md">
+        <Card.Header>
+          <Card.Title>Revisa tu correo</Card.Title>
+          <Card.Description>
+            Enviamos un código y un enlace de acceso a {email.trim()}. Escribe
+            el código aquí o abre el enlace del correo.
+          </Card.Description>
+        </Card.Header>
+        <Card.Content>
           <form
             className="flex flex-col gap-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submit();
-            }}
-          >
-            <TextField
-              type="email"
-              value={email}
-              onChange={(value) => {
-                setEmail(value);
-                setSent(false);
-                setSendError(null);
-                setCodeError(null);
-              }}
-              isRequired
-              autoComplete="email"
-            >
-              <Label>Correo</Label>
-              <Input placeholder="tu@correo.com" />
-            </TextField>
-            {authError ? (
-              <p className="text-sm text-danger">
-                No se pudo confirmar el enlace. Pide uno nuevo.
-              </p>
-            ) : null}
-            {sendError ? <p className="text-sm text-danger">{sendError}</p> : null}
-            {sent ? (
-              <p className="text-sm text-success" role="status">
-                Te enviamos un código y un enlace a {email.trim()}.
-              </p>
-            ) : null}
-            <Button type="submit" isDisabled={pending || !email.trim()}>
-              {pending ? "Enviando..." : sent ? "Pedir otro código" : "Enviar código y enlace"}
-            </Button>
-          </form>
-          <form
-            className="flex flex-col gap-4 border-t border-separator pt-5"
             onSubmit={(event) => {
               event.preventDefault();
               void verifyCode();
@@ -124,24 +107,91 @@ export function LoginForm({ authError }: { authError: boolean }) {
             <TextField
               type="text"
               value={code}
-              onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, 6))}
+              onChange={(value) => setCode(value.replace(/\D/g, "").slice(0, CODE_LENGTH))}
               isRequired
               autoComplete="one-time-code"
             >
-              <Label>Código de 6 dígitos</Label>
+              <Label>Código de {CODE_LENGTH} dígitos</Label>
               <Input
                 inputMode="numeric"
-                pattern="[0-9]{6}"
-                maxLength={6}
-                placeholder="123456"
+                pattern="[0-9]{8}"
+                maxLength={CODE_LENGTH}
+                placeholder="12345678"
               />
             </TextField>
             {codeError ? <p className="text-sm text-danger">{codeError}</p> : null}
-            <Button type="submit" isDisabled={pending || !email.trim() || code.length !== 6}>
+            <Button type="submit" isDisabled={pending || code.length !== CODE_LENGTH}>
               {pending ? "Comprobando..." : "Entrar con código"}
             </Button>
+            {sendError ? <p className="text-sm text-danger">{sendError}</p> : null}
+            <Button
+              type="button"
+              variant="ghost"
+              isDisabled={pending || secondsUntilResend > 0}
+              onPress={() => void submit()}
+            >
+              {secondsUntilResend > 0
+                ? `Reenviar correo en ${secondsUntilResend} s`
+                : "Reenviar correo"}
+            </Button>
+            <button
+              type="button"
+              className="self-center text-sm text-primary underline"
+              disabled={pending}
+              onClick={() => {
+                setSent(false);
+                setEmail("");
+                setCode("");
+                setSendError(null);
+                setCodeError(null);
+                setResendAt(0);
+              }}
+            >
+              Volver y usar otro correo
+            </button>
           </form>
-        </div>
+        </Card.Content>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="w-full max-w-md">
+      <Card.Header>
+        <Card.Title>Entrar</Card.Title>
+        <Card.Description>
+          Escribe el correo con el que te invitaron. Te enviaremos un código y
+          un enlace de acceso.
+        </Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <TextField
+            type="email"
+            value={email}
+            onChange={setEmail}
+            isRequired
+            autoComplete="email"
+          >
+            <Label>Correo</Label>
+            <Input placeholder="tu@correo.com" />
+          </TextField>
+          {authError ? (
+            <p className="text-sm text-danger">
+              No se pudo confirmar el enlace. Pide uno nuevo.
+            </p>
+          ) : null}
+          {sendError ? <p className="text-sm text-danger">{sendError}</p> : null}
+          <Button type="submit" isDisabled={pending || !email.trim()}>
+            {pending ? "Enviando..." : "Enviar código y enlace"}
+          </Button>
+        </form>
       </Card.Content>
     </Card>
   );
