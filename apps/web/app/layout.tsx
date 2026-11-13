@@ -65,6 +65,19 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full bg-background text-foreground">
+        <svg aria-hidden="true" className="absolute h-0 w-0" focusable="false">
+          <defs>
+            <filter id="dark-logo-colors" colorInterpolationFilters="sRGB">
+              <feColorMatrix
+                type="matrix"
+                values="-1.25653026 0.03695069 0.2395234 0 1.07417381
+                        -2.17838202 1.03567101 0.23122822 0 1.03697298
+                        -2.08069673 0.03407142 1.22085924 0 0.99047195
+                        0 0 0 1 0"
+              />
+            </filter>
+          </defs>
+        </svg>
         <RegisterPwa />
         <IosPullToRefresh />
         <Providers>{children}</Providers>

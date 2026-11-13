@@ -92,6 +92,10 @@
   --warning-foreground: oklch(21.03% 0.0059 49.31);
 }
 
+.dark .theme-logo {
+  filter: url('#dark-logo-colors');
+}
+
 .font-display {
   font-family: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
 }

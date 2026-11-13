@@ -49,7 +49,7 @@ export function AppShell({ children, lines, activeId }: {
     <div className="min-h-full md:grid md:grid-cols-[240px_1fr]">
       <aside className="app-desktop-sidebar sticky top-0 hidden h-screen shrink-0 flex-col gap-6 self-start border-r border-separator p-4 md:flex">
         <Link href="/dashboard" className="flex items-center gap-3">
-          <Image src="/logo.png" alt="" width={40} height={40} />
+          <Image src="/logo.png" alt="" width={40} height={40} className="theme-logo" />
           <p className="text-lg font-semibold">SoyGerman</p>
         </Link>
         <nav className="flex flex-1 flex-col gap-1">
@@ -78,7 +78,7 @@ export function AppShell({ children, lines, activeId }: {
             href="/dashboard"
             className="flex items-center gap-2 font-semibold md:hidden"
           >
-            <Image src="/logo.png" alt="" width={28} height={28} />
+            <Image src="/logo.png" alt="" width={28} height={28} className="theme-logo" />
             SoyGerman
           </Link>
           <label className="mr-3 flex min-w-0 items-center gap-2 text-sm">
