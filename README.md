@@ -43,7 +43,9 @@ Después del primer despliegue, agrega la URL de producción en Supabase → Aut
 
 ## Correo con Resend
 
-El magic link lo envía Supabase Auth. En [SMTP](https://supabase.com/dashboard/project/nbwxmkcwzqqxvxxfqqpn/auth/smtp) usa la cuenta de Resend:
+Supabase Auth envía el enlace y el código de acceso. La plantilla de **Magic link or OTP** está en [`supabase/templates/magic-link.html`](supabase/templates/magic-link.html) y se aplica en [Emails](https://supabase.com/dashboard/project/nbwxmkcwzqqxvxxfqqpn/auth/templates/magic-link-or-otp), con el asunto «Tu código y enlace para entrar a SoyGerman». Usa `{{ .ConfirmationURL }}` para el botón y `{{ .Token }}` para los seis dígitos. La Site URL es `https://www.soygerman.com`, y las redirect URLs incluyen `https://www.soygerman.com/**`.
+
+En [SMTP](https://supabase.com/dashboard/project/nbwxmkcwzqqxvxxfqqpn/auth/smtp) usa la cuenta de Resend:
 
 - Host: `smtp.resend.com`
 - Puerto: `465`
@@ -51,7 +53,7 @@ El magic link lo envía Supabase Auth. En [SMTP](https://supabase.com/dashboard/
 - Contraseña: la API key de Resend
 - Remitente: un correo de un dominio verificado en Resend, por ejemplo `SoyGerman <no-reply@tu-dominio>`
 
-Sin ese SMTP, Supabase solo manda el enlace a los miembros del equipo y con un límite bajo.
+Sin ese SMTP, Supabase solo manda el correo a los miembros del equipo y con un límite bajo.
 
 ## Worker en Render
 

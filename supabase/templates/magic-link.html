@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Entra a SoyGerman</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f8f3f1;color:#1c1c1c;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#f8f3f1;">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:520px;border-collapse:collapse;background:#ffffff;border:1px solid #eadfdb;border-radius:16px;">
+            <tr>
+              <td style="padding:32px 32px 0;">
+                <p style="margin:0;color:#7a0505;font-family:Montserrat,Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;letter-spacing:-0.5px;">SoyGerman</p>
+                <p style="margin:8px 0 0;color:#69615e;font-size:13px;">Agenda tus mensajes de WhatsApp</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 32px;">
+                <h1 style="margin:0 0 16px;color:#1c1c1c;font-family:Montserrat,Arial,Helvetica,sans-serif;font-size:26px;line-height:1.25;">Entra a tu cuenta</h1>
+                <p style="margin:0 0 24px;color:#44403e;font-size:16px;line-height:1.6;">Recibimos una solicitud para iniciar sesión en SoyGerman. Puedes usar el botón o escribir este código en la pantalla donde pediste el acceso.</p>
+                <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;">
+                  <tr>
+                    <td align="center" style="padding:0 0 24px;">
+                      <a href="{{ .ConfirmationURL }}" style="display:inline-block;border-radius:8px;background:#7a0505;padding:14px 28px;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;">Entrar a SoyGerman</a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 10px;color:#69615e;font-size:13px;font-weight:700;text-align:center;text-transform:uppercase;letter-spacing:1px;">O usa este código</p>
+                <p style="margin:0 0 24px;border:1px solid #eadfdb;border-radius:8px;background:#f8f3f1;padding:18px;color:#7a0505;font-size:30px;font-weight:700;letter-spacing:7px;text-align:center;">{{ .Token }}</p>
+                <p style="margin:0 0 16px;color:#69615e;font-size:13px;line-height:1.6;">El enlace y el código son de un solo uso. Si no solicitaste este acceso, puedes ignorar este correo.</p>
+                <p style="margin:0;color:#69615e;font-size:12px;line-height:1.6;word-break:break-all;">Si el botón no funciona, copia este enlace en tu navegador:<br /><a href="{{ .ConfirmationURL }}" style="color:#7a0505;text-decoration:underline;">{{ .ConfirmationURL }}</a></p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:20px 0 0;color:#817773;font-size:12px;">SoyGerman · Tu tiempo, a tu manera</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
