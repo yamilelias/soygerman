@@ -5,11 +5,9 @@ const withPWA = withPWAInit({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
   register: false,
+  cacheStartUrl: false,
   cacheOnFrontEndNav: true,
   reloadOnOnline: true,
-  dynamicStartUrl: true,
-  // /dashboard manda a /login si no hay sesión. El SW guarda ese destino.
-  dynamicStartUrlRedirect: "/login",
 });
 
 const nextConfig: NextConfig = {

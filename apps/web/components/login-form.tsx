@@ -22,11 +22,12 @@ export function LoginForm({ authError }: { authError: boolean }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [code, setCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function submit() {
-    setError(null);
+    setSendError(null);
     setPending(true);
     const supabase = createClient();
     const origin = window.location.origin;
@@ -39,14 +40,16 @@ export function LoginForm({ authError }: { authError: boolean }) {
     });
     setPending(false);
     if (signInError) {
-      setError(accessMessage(signInError.message));
+      setSendError(accessMessage(signInError.message));
       return;
     }
+    setCode("");
+    setCodeError(null);
     setSent(true);
   }
 
   async function verifyCode() {
-    setError(null);
+    setCodeError(null);
     setPending(true);
     const supabase = createClient();
     const { error: verifyError } = await supabase.auth.verifyOtp({
@@ -56,27 +59,63 @@ export function LoginForm({ authError }: { authError: boolean }) {
     });
     setPending(false);
     if (verifyError) {
-      setError("El código no es válido o venció. Revisa el correo o pide uno nuevo.");
+      setCodeError("El código no es válido o venció. Revisa el correo o pide uno nuevo.");
       return;
     }
     router.replace("/dashboard");
     router.refresh();
   }
 
-  if (sent) {
-    return (
-      <Card className="w-full max-w-md">
-        <Card.Header>
-          <Card.Title>Revisa tu correo</Card.Title>
-          <Card.Description>
-            Enviamos un código y un enlace de acceso a {email.trim()}. Escribe
-            el código aquí para entrar en esta misma ventana, o abre el enlace
-            del correo.
-          </Card.Description>
-        </Card.Header>
-        <Card.Content>
+  return (
+    <Card className="w-full max-w-md">
+      <Card.Header>
+        <Card.Title>{sent ? "Revisa tu correo" : "Entrar"}</Card.Title>
+        <Card.Description>
+          Escribe el correo con el que te invitaron. Puedes entrar con el código
+          en esta ventana o con el enlace del correo.
+        </Card.Description>
+      </Card.Header>
+      <Card.Content>
+        <div className="flex flex-col gap-6">
           <form
             className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submit();
+            }}
+          >
+            <TextField
+              type="email"
+              value={email}
+              onChange={(value) => {
+                setEmail(value);
+                setSent(false);
+                setSendError(null);
+                setCodeError(null);
+              }}
+              isRequired
+              autoComplete="email"
+            >
+              <Label>Correo</Label>
+              <Input placeholder="tu@correo.com" />
+            </TextField>
+            {authError ? (
+              <p className="text-sm text-danger">
+                No se pudo confirmar el enlace. Pide uno nuevo.
+              </p>
+            ) : null}
+            {sendError ? <p className="text-sm text-danger">{sendError}</p> : null}
+            {sent ? (
+              <p className="text-sm text-success" role="status">
+                Te enviamos un código y un enlace a {email.trim()}.
+              </p>
+            ) : null}
+            <Button type="submit" isDisabled={pending || !email.trim()}>
+              {pending ? "Enviando..." : sent ? "Pedir otro código" : "Enviar código y enlace"}
+            </Button>
+          </form>
+          <form
+            className="flex flex-col gap-4 border-t border-separator pt-5"
             onSubmit={(event) => {
               event.preventDefault();
               void verifyCode();
@@ -97,65 +136,12 @@ export function LoginForm({ authError }: { authError: boolean }) {
                 placeholder="123456"
               />
             </TextField>
-            {error ? <p className="text-sm text-danger">{error}</p> : null}
-            <Button type="submit" isDisabled={pending || code.length !== 6}>
+            {codeError ? <p className="text-sm text-danger">{codeError}</p> : null}
+            <Button type="submit" isDisabled={pending || !email.trim() || code.length !== 6}>
               {pending ? "Comprobando..." : "Entrar con código"}
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              isDisabled={pending}
-              onPress={() => {
-                setSent(false);
-                setCode("");
-                setError(null);
-              }}
-            >
-              Cambiar correo o pedir otro código
-            </Button>
           </form>
-        </Card.Content>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="w-full max-w-md">
-      <Card.Header>
-        <Card.Title>Entrar</Card.Title>
-        <Card.Description>
-          Escribe el correo con el que te invitaron. Te enviaremos un código y
-          un enlace, sin contraseña.
-        </Card.Description>
-      </Card.Header>
-      <Card.Content>
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-        >
-          <TextField
-            type="email"
-            value={email}
-            onChange={setEmail}
-            isRequired
-            autoComplete="email"
-          >
-            <Label>Correo</Label>
-            <Input placeholder="tu@correo.com" />
-          </TextField>
-          {authError ? (
-            <p className="text-sm text-danger">
-              No se pudo confirmar el enlace. Pide uno nuevo.
-            </p>
-          ) : null}
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
-          <Button type="submit" isDisabled={pending || !email.trim()}>
-            {pending ? "Enviando..." : "Enviar código y enlace"}
-          </Button>
-        </form>
+        </div>
       </Card.Content>
     </Card>
   );
