@@ -73,4 +73,4 @@ El mismo `WORKER_API_SECRET` en ambas. El service role solo en el worker.
 
 ## Correo
 
-Remitente previsto: `no-reply@soygerman.com` vía Resend (`smtp.resend.com`, puerto 465, usuario `resend`). La contraseña SMTP es la API key y no está en el repositorio. El correo de acceso ya llega. La Site URL y las redirect URLs tienen que incluir `https://www.soygerman.com/**`; si no, el enlace no vuelve a `/auth/callback`.
+Remitente previsto: `no-reply@soygerman.com` vía Resend (`smtp.resend.com`, puerto 465, usuario `resend`). La contraseña SMTP es la API key y no está en el repositorio. El correo de acceso ya llega. El 2026-11-12 se aplicó en Supabase la plantilla en español con botón y código, y la Site URL quedó en `https://www.soygerman.com`. Las redirect URLs incluyen `https://www.soygerman.com/**`, el apex, el dominio de Vercel y localhost.
